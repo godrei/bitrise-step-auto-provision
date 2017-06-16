@@ -13,7 +13,6 @@ apple_developer_portal_password = ENV['APPLE_DEVELOPER_PORTAL_PASSWORD']
 apple_developer_portal_team_id = ENV['APPLE_DEVELOPER_PORTAL_TEAMID']
 # generate web session locally by calling: `fastlane spaceauth -u <apple_developer_portal_username>`
 # apple_developer_portal_session = ENV['APPLE_DEVELOPER_PORTAL_SESSION']
-apple_developer_portal_app_specific_password = ENV['APPLE_DEVELOPER_PORTAL_APP_SPECIFIC_PASSWORD']
 
 # ---
 
@@ -21,13 +20,9 @@ apple_developer_portal_app_specific_password = ENV['APPLE_DEVELOPER_PORTAL_APP_S
 
 log_info('Authentication')
 
-# ENV['FASTLANE_SESSION'] = apple_developer_portal_session
 puts "ENV['FASTLANE_SESSION']: #{ENV['FASTLANE_SESSION']}"
 puts "ENV['FASTLANE_PASSWORD']: #{ENV['FASTLANE_PASSWORD']}"
 
-system('date +%Y%m%d%H%M%S')
-
-ENV['FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD'] = apple_developer_portal_app_specific_password
 client = Spaceship::Portal.login(apple_developer_portal_username, apple_developer_portal_password)
 client.team_id = apple_developer_portal_team_id
 
