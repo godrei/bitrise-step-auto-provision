@@ -1,4 +1,5 @@
 require 'spaceship'
+require 'fastlane'
 
 require_relative 'log'
 
@@ -8,11 +9,15 @@ PROVISIONIN_PROFILE_NAME = 'Bitrise iOS Provisioning Profile: *'.freeze
 
 # Params - Authentication
 
-apple_developer_portal_username = ENV['APPLE_DEVELOPER_PORTAL_USERNAME']
-apple_developer_portal_password = ENV['APPLE_DEVELOPER_PORTAL_PASSWORD']
-apple_developer_portal_team_id = ENV['APPLE_DEVELOPER_PORTAL_TEAMID']
-# generate web session locally by calling: `fastlane spaceauth -u <apple_developer_portal_username>`
-# apple_developer_portal_session = ENV['APPLE_DEVELOPER_PORTAL_SESSION']
+username = ENV['apple_developer_portal_user']
+password = ENV['apple_developer_portal_password']
+session = ENV['apple_developer_portal_session']
+team_id = ENV['apple_developer_portal_team_id']
+
+puts "username: #{username}"
+puts "password: #{password}"
+puts "session: #{session}"
+puts "team_id: #{team_id}"
 
 # ---
 
@@ -20,11 +25,14 @@ apple_developer_portal_team_id = ENV['APPLE_DEVELOPER_PORTAL_TEAMID']
 
 log_info('Authentication')
 
-puts "ENV['FASTLANE_SESSION']: #{ENV['FASTLANE_SESSION']}"
-puts "ENV['FASTLANE_PASSWORD']: #{ENV['FASTLANE_PASSWORD']}"
+ENV['FASTLANE_PASSWORD'] = password
+ENV['FASTLANE_SESSION'] = session
 
-client = Spaceship::Portal.login(apple_developer_portal_username, apple_developer_portal_password)
-client.team_id = apple_developer_portal_team_id
+puts "ENV['FASTLANE_PASSWORD']: #{ENV['FASTLANE_PASSWORD']}"
+puts "ENV['FASTLANE_SESSION']: #{ENV['FASTLANE_SESSION']}"
+
+client = Spaceship::Portal.login(username, password)
+client.team_id = team_id
 
 # ---
 
