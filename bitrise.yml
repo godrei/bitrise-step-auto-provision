@@ -8,6 +8,7 @@ app:
   - APPLE_DEVELOPER_PORTAL_PASSWORD: $APPLE_DEVELOPER_PORTAL_PASSWORD
   - APPLE_DEVELOPER_PORTAL_SESSION: $APPLE_DEVELOPER_PORTAL_SESSION
   - APPLE_DEVELOPER_PORTAL_TEAM_ID: $APPLE_DEVELOPER_PORTAL_TEAM_ID
+  - APPLE_DEVELOPER_PORTAL_PASSCODE: $APPLE_DEVELOPER_PORTAL_PASSCODE
   # If you want to share this step into a StepLib
   - BITRISE_STEP_ID: auto-provision
   - BITRISE_STEP_VERSION: "0.0.1"
@@ -25,6 +26,7 @@ workflows:
         - apple_developer_portal_password: $APPLE_DEVELOPER_PORTAL_PASSWORD
         - apple_developer_portal_team_id: $APPLE_DEVELOPER_PORTAL_TEAM_ID
         - apple_developer_portal_session: $APPLE_DEVELOPER_PORTAL_SESSION
+        - apple_developer_portal_passcode: $APPLE_DEVELOPER_PORTAL_PASSCODE
 
   # ----------------------------------------------------------------
   # --- workflows to Share this step into a Step Library

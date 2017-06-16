@@ -11,13 +11,13 @@ PROVISIONIN_PROFILE_NAME = 'Bitrise iOS Provisioning Profile: *'.freeze
 
 username = ENV['apple_developer_portal_user']
 password = ENV['apple_developer_portal_password']
-session = ENV['apple_developer_portal_session']
 team_id = ENV['apple_developer_portal_team_id']
+passcode = ENV['apple_developer_portal_passcode']
 
 puts "username: #{username}"
 puts "password: #{password}"
-puts "session: #{session}"
 puts "team_id: #{team_id}"
+puts "passcode: #{passcode}"
 
 # ---
 
@@ -25,11 +25,9 @@ puts "team_id: #{team_id}"
 
 log_info('Authentication')
 
-ENV['FASTLANE_PASSWORD'] = password
-ENV['FASTLANE_SESSION'] = session
-
-puts "ENV['FASTLANE_PASSWORD']: #{ENV['FASTLANE_PASSWORD']}"
-puts "ENV['FASTLANE_SESSION']: #{ENV['FASTLANE_SESSION']}"
+output, status = Open3.capture2("fastlane spaceauth -u #{username}", :stdin_data => passcode)
+puts "output: #{output}"
+puts "status: #{status}"
 
 client = Spaceship::Portal.login(username, password)
 client.team_id = team_id
