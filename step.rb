@@ -25,6 +25,8 @@ puts "passcode: #{passcode}"
 
 log_info('Authentication')
 
+ENV['FASTLANE_PASSWORD'] = password
+
 output, status = Open3.capture2("fastlane spaceauth -u #{username}", :stdin_data => passcode)
 puts "output: #{output}"
 puts "status: #{status}"
