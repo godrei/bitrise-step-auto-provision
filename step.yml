@@ -55,4 +55,3 @@ inputs:
 
         This input is required if you enabled Two Factor or Two Step authentication for you Apple Developer Portal account.
         You can obtain your session by running: `fastlane spaceauth -u <apple_developer_portal_user>` on your local machine.
-  - apple_developer_portal_passcode:
