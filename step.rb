@@ -23,6 +23,8 @@ log_info('Authentication')
 
 # ENV['FASTLANE_SESSION'] = apple_developer_portal_session
 puts "ENV['FASTLANE_SESSION']: #{ENV['FASTLANE_SESSION']}"
+puts "ENV['FASTLANE_PASSWORD']: #{ENV['FASTLANE_PASSWORD']}"
+
 ENV['FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD'] = apple_developer_portal_app_specific_password
 client = Spaceship::Portal.login(apple_developer_portal_username, apple_developer_portal_password)
 client.team_id = apple_developer_portal_team_id
