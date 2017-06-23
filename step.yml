@@ -55,3 +55,50 @@ inputs:
 
         This input is required if you enabled Two Factor or Two Step authentication for you Apple Developer Portal account.
         You can obtain your session by running: `fastlane spaceauth -u <apple_developer_portal_user>` on your local machine.
+
+  - project_path: $BITRISE_PROJECT_PATH
+    opts:
+      title: "Project (or Workspace) path"
+      summary: ""
+      description: |
+        A `.xcodeproj` or `.xcworkspace` path.
+      is_required: true
+
+  - development_certificate_path:
+    opts:
+      title: "Development Certificate path"
+  - development_certificate_passphrase:
+    opts:
+      title: "Development Certificate Passphrase"
+
+  - distributon_type: "none"
+    opts:
+      title: "Release Code Singing Type"
+      summary: "Release Code Singing Type"
+      description: |
+        Specify what kind of code sign files should the step search for (in your developer account) or create if not exist.
+
+        Leave this input empty if you do not want to use any release code sign files later in your workflow.
+      value_options:
+      - "none"
+      - "app-store"
+      - "ad-hoc"
+      - "enterprise"
+      - "development"
+  - distribution_certificate_path:
+    opts:
+      title: "Distribution Certificate path"
+  - distribution_certificate_passphrase:
+    opts:
+      title: "Distribution Certificate Passphrase"
+outputs:
+  - CERTIFICATE_PATH_LIST:
+    opts:
+      title: "List of Certificate paths"
+  - CERTIFICATE_PASSPHRASE_LIST:
+    opts:
+      title: "List of Certificate Passhrases"
+  - PROVISIONING_PROFILE_PATH_LIST:
+    opts:
+      title: "List of Provisioning Profiles"
+    

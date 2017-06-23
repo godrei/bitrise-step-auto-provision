@@ -1,117 +1,160 @@
 require 'spaceship'
 require 'fastlane'
 
-require_relative 'log'
+require_relative 'auto-provision/log'
+require_relative 'auto-provision/authenticator'
+require_relative 'auto-provision/analyzer'
+require_relative 'auto-provision/generator'
+require_relative 'auto-provision/downloader'
 
-WILDCARD_APP_BUNDLE_ID = '*'.freeze
-WILDCARD_APP_NAME = 'Bitrise Wildcard'.freeze
-PROVISIONIN_PROFILE_NAME = 'Bitrise iOS Provisioning Profile: *'.freeze
-
-# Params - Authentication
-
+# Params
 username = ENV['apple_developer_portal_user']
 password = ENV['apple_developer_portal_password']
 session = ENV['apple_developer_portal_session']
 team_id = ENV['apple_developer_portal_team_id']
 
+project_path = ENV['project_path']
+
+development_certificate_path = ENV['development_certificate_path']
+development_certificate_passphrase = ENV['development_certificate_passphrase']
+
+distributon_type = ENV['distributon_type']
+distribution_certificate_path = ENV['distribution_certificate_path']
+distribution_certificate_passphrase = ENV['distribution_certificate_passphrase']
+
+puts
+log_info('Params')
 puts "username: #{username}"
 puts "password: #{password}"
 puts "session: #{session}"
 puts "team_id: #{team_id}"
-
-# ---
+puts
+puts "project_path: #{project_path}"
+puts
+puts "development_certificate_path: #{development_certificate_path}"
+puts "development_certificate_passphrase: #{development_certificate_passphrase}"
+puts
+puts "distributon_type: #{distributon_type}"
+puts "distribution_certificate_path: #{distribution_certificate_path}"
+puts "distribution_certificate_passphrase: #{distribution_certificate_passphrase}"
 
 # Authentication
-
+puts
 log_info('Authentication')
+developer_portal_sign_in(username, password, session, team_id)
+log_done("authenticated: #{username}")
 
-ENV['FASTLANE_PASSWORD'] = password
-ENV['FASTLANE_SESSION'] = session
-
-puts "ENV['FASTLANE_PASSWORD']: #{ENV['FASTLANE_PASSWORD']}"
-puts "ENV['FASTLANE_SESSION']: #{ENV['FASTLANE_SESSION']}"
-
-client = Spaceship::Portal.login(username, password)
-client.team_id = team_id
-
-# ---
-
-# Find or create app with wildcard bundle id
-
-log_info("Seraching for app with wildcard bundle id (#{WILDCARD_APP_BUNDLE_ID})")
-
-app = Spaceship::Portal.app.find(WILDCARD_APP_BUNDLE_ID)
-
-if app.nil?
-  log_warning("No app with wildcard bundle id found, generating with name: #{WILDCARD_APP_NAME} ...")
-
-  app = Spaceship::Portal.app.create!(bundle_id: bundle_id, name: WILDCARD_APP_NAME)
-
-  raise 'No app generated' if app.nil?
-end
-
-log_details(app.to_s)
-
-# ---
-
-# Find or create development cretificate
-
-log_info('Searching for development certificate')
-
-dev_cert = nil
-
-dev_certs = Spaceship::Portal.certificate.development.all
-
-if dev_certs.empty?
-  log_warning('No development certificate found, generating ...')
-
-  csr, pkey = Spaceship::Portal.certificate.create_certificate_signing_request
-  dev_cert = Spaceship::Portal.certificate.development.create!(csr: csr)
-
-  raise 'No certificate generated' if app.nil?
+# Analyze project
+ditribution_provisioning_profile_type = nil
+case distributon_type
+when 'app-store'
+  ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::APP_STORE
+when 'ad-hoc'
+  ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::AD_HOC
+when 'enterprise'
+  ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::IN_HOUSE
+when 'development'
+  ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::DEVELOPMENT
+when 'none'
+  ditribution_provisioning_profile_type = nil
 else
-  if dev_certs.count > 1
-    log_warning('Multiple development certificate found, using first:')
-    dev_certs.each_with_index { |cert, index| puts "#{index}, #{cert}" }
-  end
-
-  dev_cert = dev_certs.first
+  log_error('invalid distribution type: #{distributon_type}')
 end
 
-log_details(dev_cert.to_s)
+bundle_id_code_sing_info_map = {}
 
-# ---
+wildcard_app = ensure_wildcard_app
 
-# Find or create provisioning profile
+project_bundle_id_entitlements_map = get_project_bundle_id_entitlements_map(project_path)
+project_bundle_id_entitlements_map.each do |path, bundle_id_entitlements_map|
+  puts
+  log_info("Analyzing project: #{path}")
 
-log_info('Searching for development provisioning profile')
+  bundle_id_entitlements_map.each do |bundle_id, entitlements_path|
+    log_details("  analyzing target with bundle id: #{bundle_id}")
+    log_details("  entitlements: #{entitlements_path}") unless entitlements_path.to_s.empty?
 
-profile_dev = nil
+    app = ensure_app(bundle_id, entitlements_path)
+    development_portal_certificate = find_portal_certificate(development_certificate_path, development_certificate_passphrase)
+    development_provisioning_profile = ensure_provisioning_profile(app, development_portal_certificate, SupportedProvisionigProfileTypes::DEVELOPMENT)
 
-profiles_dev = Spaceship::Portal.provisioning_profile.development.all
+    development_code_sign_info_map = {
+      development_certificate_path: development_certificate_path,
+      development_certificate_passphrase: development_certificate_passphrase,
+      development_portal_certificate: development_portal_certificate,
+      development_provisioning_profile: development_provisioning_profile
+    }
 
-if profiles_dev.empty?
-  log_warning('No development provisioning profile found, generating ...')
+    bundle_id_code_sing_info_map[bundle_id] = {
+      wildcard_app: wildcard_app,
+      app: app,
+      development: development_code_sign_info_map
+    }
 
-  profile_dev = Spaceship::Portal.provisioning_profile.development.create!(bundle_id: WILDCARD_APP_BUNDLE_ID, certificate: dev_cert, name: PROVISIONIN_PROFILE_NAME)
-else
-  if profiles_dev.count > 1
-    log_warning('Multiple development provisionig profile found, using first:')
-    profiles_dev.each_with_index { |prof, index| puts "#{index}, #{prof}" }
+    unless ditribution_provisioning_profile_type.nil?
+      distribution_portal_certificate = find_portal_certificate(distribution_certificate_path, distribution_certificate_passphrase)
+      distribution_provisioning_profile = ensure_provisioning_profile(app, distribution_portal_certificate, ditribution_provisioning_profile_type)
+
+      distribution_code_sign_info_map = {
+        distribution_certificate_path: distribution_certificate_path,
+        distribution_certificate_passphrase: distribution_certificate_passphrase,
+        distribution_portal_certificate: distribution_portal_certificate,
+        distribution_provisioning_profile: distribution_provisioning_profile
+      }
+
+      bundle_id_code_sing_info_map[bundle_id][:distribution] = distribution_code_sign_info_map
+    end
   end
-
-  profile_dev = profiles_dev.first
 end
 
-log_details(profile_dev.to_s)
+certificate_passphrase_map = {}
+provisioning_profile_path_map = {}
+tmp_dir = Dir.mktmpdir
 
-# ---
+bundle_id_code_sing_info_map.each do |bundle_id, code_sign_info|
+  puts
+  log_info("signing: #{bundle_id}")
 
-log_info('Git clone sample')
+  log_details("  app: #{code_sign_info[:app].name}")
+  log_details("  wildcard_app: #{code_sign_info[:wildcard_app].name}")
 
-system('rm -rf ./_tmp')
-system('git clone https://github.com/godrei/sign_test.git ./_tmp')
+  log_details("  development_portal_certificate: #{code_sign_info[:development][:development_portal_certificate].name}")
+  certificate = code_sign_info[:development][:development_certificate_path]
+  passphrase = code_sign_info[:development][:development_certificate_passphrase]
+  certificate_passphrase_map[certificate] = passphrase
 
-log_info('Build sample app')
+  profile = code_sign_info[:development][:development_provisioning_profile]
+  log_details("  development_provisioning_profile: #{code_sign_info[:development][:development_provisioning_profile].name}")
+  profile_path = download_profile(profile, tmp_dir)
+  provisioning_profile_path_map[profile_path] = true
 
-system('xcodebuild -project ./_tmp/sign_test.xcodeproj -scheme sign_test archive')
+  unless ditribution_provisioning_profile_type.nil?
+    log_details("  distribution_portal_certificate: #{code_sign_info[:distribution][:distribution_portal_certificate].name}")
+    certificate = code_sign_info[:distribution][:distribution_certificate_path]
+    passphrase = code_sign_info[:distribution][:distribution_certificate_passphrase]
+    certificate_passphrase_map[certificate] = passphrase
+
+    profile = code_sign_info[:distribution][:distribution_provisioning_profile]
+    log_details("  distribution_provisioning_profile: #{code_sign_info[:distribution][:distribution_provisioning_profile].name}")
+    profile_path = download_profile(profile, tmp_dir)
+    provisioning_profile_path_map[profile_path] = true
+  end
+end
+
+certificate_paths = []
+certificate_passphrases = []
+
+certificate_passphrase_map.each do |certificate, passphrase|
+  certificate_paths.push(certificate)
+  certificate_passphrases.push(passphrase)
+end
+
+certificate_path_list = certificate_paths.join('|')
+certificate_passphrase_list = certificate_passphrases.join('|')
+provisioning_profile_path_list = provisioning_profile_path_map.keys.join('|')
+
+raise 'failed to export CERTIFICATE_PATH_LIST' unless system("envman add --key CERTIFICATE_PATH_LIST --value \"#{certificate_path_list}\"")
+raise 'failed to export CERTIFICATE_PASSPHRASE_LIST' unless system("envman add --key CERTIFICATE_PASSPHRASE_LIST --value \"#{certificate_passphrase_list}\"")
+raise 'failed to export PROVISIONING_PROFILE_PATH_LIST' unless system("envman add --key PROVISIONING_PROFILE_PATH_LIST --value \"#{provisioning_profile_path_list}\"")
+
+exit(0)
