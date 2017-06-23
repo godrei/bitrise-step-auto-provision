@@ -85,6 +85,9 @@ workflows:
         - certificate_url: $CERTIFICATE_PATH_LIST
         - certificate_passphrase: $CERTIFICATE_PASSPHRASE_LIST
         - provisioning_profile_url: $PROVISIONING_PROFILE_PATH_LIST
+        - default_certificate_url: ""
+        - default_certificate_passphrase: ""
+        - default_provisioning_profile_url: ""
     - xcode-archive:
         title: Xcode archive
         inputs:
