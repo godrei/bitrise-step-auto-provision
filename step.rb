@@ -145,7 +145,7 @@ bundle_id_code_sing_info_map.each do |bundle_id, code_sign_info|
   profile = code_sign_info[:development][:development_provisioning_profile]
   log_details("  development_provisioning_profile: #{code_sign_info[:development][:development_provisioning_profile].name}")
   profile_path = download_profile(profile, tmp_dir)
-  provisioning_profile_path_map[profile_path] = true
+  provisioning_profile_path_map['file://' + profile_path] = true
 
   unless ditribution_provisioning_profile_type.nil?
     log_details("  distribution_portal_certificate: #{code_sign_info[:distribution][:distribution_portal_certificate].name}")
@@ -156,7 +156,7 @@ bundle_id_code_sing_info_map.each do |bundle_id, code_sign_info|
     profile = code_sign_info[:distribution][:distribution_provisioning_profile]
     log_details("  distribution_provisioning_profile: #{code_sign_info[:distribution][:distribution_provisioning_profile].name}")
     profile_path = download_profile(profile, tmp_dir)
-    provisioning_profile_path_map[profile_path] = true
+    provisioning_profile_path_map['file://' + profile_path] = true
   end
 end
 
@@ -164,7 +164,7 @@ certificate_paths = []
 certificate_passphrases = []
 
 certificate_passphrase_map.each do |certificate, passphrase|
-  certificate_paths.push(certificate)
+  certificate_paths.push('file://' + certificate)
   certificate_passphrases.push(passphrase)
 end
 
