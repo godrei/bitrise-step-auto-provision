@@ -1,5 +1,6 @@
 require 'spaceship'
 require 'fastlane'
+require 'net/http'
 
 require_relative 'auto-provision/log'
 require_relative 'auto-provision/authenticator'
@@ -37,6 +38,24 @@ puts
 puts "distributon_type: #{distributon_type}"
 puts "distribution_certificate_path: #{distribution_certificate_path}"
 puts "distribution_certificate_passphrase: #{distribution_certificate_passphrase}"
+
+if development_certificate_path.start_with?('file://')
+  development_certificate_path = development_certificate_path.sub('file://', '')
+else
+  tmp_dir = Dir.mktmpdir
+  path = File.join(tmp_dir, 'DevelopmentCertificate.p12')
+  raise 'failed to download certificate' unless system("wget -O #{path} #{development_certificate_path}")
+  development_certificate_path = path
+end
+
+if distribution_certificate_path.start_with?('file://')
+  distribution_certificate_path = distribution_certificate_path.sub('file://', '')
+else
+  tmp_dir = Dir.mktmpdir
+  path = File.join(tmp_dir, 'DistributionCertificate.p12')
+  raise 'failed to download certificate' unless system("wget -O #{path} #{distribution_certificate_path}")
+  distribution_certificate_path = path
+end
 
 # Authentication
 puts
