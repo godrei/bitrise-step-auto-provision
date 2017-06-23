@@ -44,7 +44,7 @@ if development_certificate_path.start_with?('file://')
 else
   tmp_dir = Dir.mktmpdir
   path = File.join(tmp_dir, 'DevelopmentCertificate.p12')
-  raise 'failed to download certificate' unless system("wget -O #{path} #{development_certificate_path}")
+  raise 'failed to download certificate' unless system("wget -q -O \"#{path}\" \"#{development_certificate_path}\"")
   development_certificate_path = path
 end
 
@@ -53,7 +53,7 @@ if distribution_certificate_path.start_with?('file://')
 else
   tmp_dir = Dir.mktmpdir
   path = File.join(tmp_dir, 'DistributionCertificate.p12')
-  raise 'failed to download certificate' unless system("wget -O #{path} #{distribution_certificate_path}")
+  raise 'failed to download certificate' unless system("wget -q -O \"#{path}\" \"#{distribution_certificate_path}\"")
   distribution_certificate_path = path
 end
 
