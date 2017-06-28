@@ -144,7 +144,8 @@ workflows:
         - export_method: $DISTRIBUTION_TYPE
         - project_path: $BITRISE_PROJECT_PATH
         - scheme: $BITRISE_SCHEME
-        - force_team_id: $APPLE_DEVELOPER_PORTAL_TEAM_ID
+        # - force_team_id: $APPLE_DEVELOPER_PORTAL_TEAM_ID
+        # - force_code_sign_identity: iPhone Development
         - output_tool: xcodebuild
 
   # ----------------------------------------------------------------

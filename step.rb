@@ -97,28 +97,14 @@ project_bundle_id_entitlements_map.each do |path, bundle_id_entitlements_map|
     log_details("  entitlements: #{entitlements_path}") unless entitlements_path.to_s.empty?
 
     app = ensure_app(bundle_id, entitlements_path)
-    development_portal_certificate = find_portal_certificate(development_certificate_path, development_certificate_passphrase)
-    development_provisioning_profile = ensure_provisioning_profile(app, development_portal_certificate, SupportedProvisionigProfileTypes::DEVELOPMENT)
-
-    # puts
-    # puts "development_provisioning_profile: #{development_provisioning_profile}"
-    # puts
-
-    # log_warning('development_provisioning_profile infos:')
-    # log_warning("uuid: #{development_provisioning_profile.uuid}")
-    # log_warning("distribution_method: #{development_provisioning_profile.distribution_method}")
-    # log_warning("name: #{development_provisioning_profile.name}")
-    # log_warning("type: #{development_provisioning_profile.type}")
-    # log_warning("app: #{development_provisioning_profile.app.name} (#{development_provisioning_profile.app.bundle_id})")
-    # development_provisioning_profile.certificates.each do |cert|
-    #   log_warning("cert: #{cert.name} (#{cert.type_display_id})")
-    # end
+    certificate = find_portal_certificate(development_certificate_path, development_certificate_passphrase)
+    profile = ensure_provisioning_profile(app, certificate, SupportedProvisionigProfileTypes::DEVELOPMENT)
 
     development_code_sign_info_map = {
-      development_certificate_path: development_certificate_path,
-      development_certificate_passphrase: development_certificate_passphrase,
-      development_portal_certificate: development_portal_certificate,
-      development_provisioning_profile: development_provisioning_profile
+      certificate: certificate,
+      certificate_path: development_certificate_path,
+      certificate_passphrase: development_certificate_passphrase,
+      profile: profile
     }
 
     bundle_id_code_sing_info_map[bundle_id] = {
@@ -128,33 +114,21 @@ project_bundle_id_entitlements_map.each do |path, bundle_id_entitlements_map|
 
     next unless ditribution_provisioning_profile_type
 
-    distribution_portal_certificate = find_portal_certificate(distribution_certificate_path, distribution_certificate_passphrase)
-    distribution_provisioning_profile = ensure_provisioning_profile(app, distribution_portal_certificate, ditribution_provisioning_profile_type)
-
-    # puts
-    # puts "distribution_provisioning_profile: #{distribution_provisioning_profile}"
-    # puts
-
-    # log_warning('distribution_provisioning_profile infos:')
-    # log_warning("uuid: #{distribution_provisioning_profile.uuid}")
-    # log_warning("distribution_method: #{distribution_provisioning_profile.distribution_method}")
-    # log_warning("name: #{distribution_provisioning_profile.name}")
-    # log_warning("type: #{distribution_provisioning_profile.type}")
-    # log_warning("app: #{distribution_provisioning_profile.app.name} (#{distribution_provisioning_profile.app.bundle_id})")
-    # distribution_provisioning_profile.certificates.each do |cert|
-    #   log_warning("cert: #{cert.name} (#{cert.type_display_id})")
-    # end
+    certificate = find_portal_certificate(distribution_certificate_path, distribution_certificate_passphrase)
+    profile = ensure_provisioning_profile(app, certificate, ditribution_provisioning_profile_type)
 
     distribution_code_sign_info_map = {
-      distribution_certificate_path: distribution_certificate_path,
-      distribution_certificate_passphrase: distribution_certificate_passphrase,
-      distribution_portal_certificate: distribution_portal_certificate,
-      distribution_provisioning_profile: distribution_provisioning_profile
+      certificate_path: distribution_certificate_path,
+      certificate_passphrase: distribution_certificate_passphrase,
+      certificate: certificate,
+      profile: profile
     }
 
     bundle_id_code_sing_info_map[bundle_id][:distribution] = distribution_code_sign_info_map
   end
 end
+
+apply_code_signing(project_path, bundle_id_code_sing_info_map, team_id)
 
 certificate_passphrase_map = {}
 provisioning_profile_path_map = {}
@@ -166,25 +140,25 @@ bundle_id_code_sing_info_map.each do |bundle_id, code_sign_info|
 
   log_details("  app: #{code_sign_info[:app].name}")
 
-  log_details("  development_portal_certificate: #{code_sign_info[:development][:development_portal_certificate].name}")
-  certificate = code_sign_info[:development][:development_certificate_path]
-  passphrase = code_sign_info[:development][:development_certificate_passphrase]
-  certificate_passphrase_map[certificate] = passphrase
+  log_details("  certificate: #{code_sign_info[:development][:certificate].name}")
+  certificate_path = code_sign_info[:development][:certificate_path]
+  passphrase = code_sign_info[:development][:certificate_passphrase]
+  certificate_passphrase_map[certificate_path] = passphrase
 
-  profile = code_sign_info[:development][:development_provisioning_profile]
-  log_details("  development_provisioning_profile: #{code_sign_info[:development][:development_provisioning_profile].name}")
+  profile = code_sign_info[:development][:profile]
+  log_details("  profile: #{code_sign_info[:development][:profile].name}")
   profile_path = download_profile(profile, tmp_dir)
   provisioning_profile_path_map['file://' + profile_path] = true
 
   next unless ditribution_provisioning_profile_type
 
-  log_details("  distribution_portal_certificate: #{code_sign_info[:distribution][:distribution_portal_certificate].name}")
-  certificate = code_sign_info[:distribution][:distribution_certificate_path]
-  passphrase = code_sign_info[:distribution][:distribution_certificate_passphrase]
-  certificate_passphrase_map[certificate] = passphrase
+  log_details("  certificate: #{code_sign_info[:distribution][:certificate].name}")
+  certificate_path = code_sign_info[:distribution][:certificate_path]
+  passphrase = code_sign_info[:distribution][:certificate_passphrase]
+  certificate_passphrase_map[certificate_path] = passphrase
 
-  profile = code_sign_info[:distribution][:distribution_provisioning_profile]
-  log_details("  distribution_provisioning_profile: #{code_sign_info[:distribution][:distribution_provisioning_profile].name}")
+  profile = code_sign_info[:distribution][:profile]
+  log_details("  profile: #{code_sign_info[:distribution][:profile].name}")
   profile_path = download_profile(profile, tmp_dir)
   provisioning_profile_path_map['file://' + profile_path] = true
 end

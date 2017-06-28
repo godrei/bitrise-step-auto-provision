@@ -33,21 +33,9 @@ def update_app_services(app, _entitlements_path)
 end
 
 def certificate_matches(certificate1, certificate2)
-  unless certificate1.subject == certificate2.subject
-    log_debug("subject mismatch (local: #{certificate1.subject} <-> remote: #{certificate2.subject})")
-    return false
-  end
-
-  unless certificate1.issuer == certificate2.issuer
-    log_debug("issuer mismatch (local: #{certificate1.issuer} <-> remote: #{certificate2.issuer})")
-    return false
-  end
-
-  unless certificate1.serial == certificate2.serial
-    log_debug("serial mismatch (local: #{certificate1.serial} <-> remote: #{certificate2.serial})")
-    return false
-  end
-
+  return false unless certificate1.subject == certificate2.subject
+  return false unless certificate1.issuer == certificate2.issuer
+  return false unless certificate1.serial == certificate2.serial
   true
 end
 
