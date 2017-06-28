@@ -83,8 +83,6 @@ developer_portal_sign_in(username, password, session, team_id)
 log_done("authenticated: #{username}")
 
 # Analyze project
-force_manual_code_sign(project_path)
-
 bundle_id_code_sing_info_map = {}
 
 project_bundle_id_entitlements_map = get_project_bundle_id_entitlements_map(project_path)
@@ -128,7 +126,7 @@ project_bundle_id_entitlements_map.each do |path, bundle_id_entitlements_map|
   end
 end
 
-apply_code_signing(project_path, bundle_id_code_sing_info_map, team_id)
+force_code_sign_properties(project_path, bundle_id_code_sing_info_map, team_id)
 
 certificate_passphrase_map = {}
 provisioning_profile_path_map = {}
