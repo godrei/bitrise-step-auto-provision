@@ -1,5 +1,5 @@
-require 'spaceship'
 require 'fastlane'
+require 'spaceship'
 
 def download_profile(profile, dir)
   tmp_profile_path = File.join(dir, profile.uuid + '.mobileprovision')

@@ -1,5 +1,5 @@
-require 'spaceship'
 require 'fastlane'
+require 'spaceship'
 
 def developer_portal_sign_in(username, password, two_factor_session, team_id)
   ENV['FASTLANE_PASSWORD'] = password

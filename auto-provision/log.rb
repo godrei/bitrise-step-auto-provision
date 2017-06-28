@@ -1,3 +1,5 @@
+DEBUG_LOG = false
+
 def log_info(message)
   puts "\e[34m#{message}\e[0m"
 end
@@ -17,3 +19,9 @@ end
 def log_error(message)
   puts "\e[31m#{message}\e[0m"
 end
+
+def log_debug(message)
+  return unless DEBUG_LOG
+  puts message.to_s
+end
+
