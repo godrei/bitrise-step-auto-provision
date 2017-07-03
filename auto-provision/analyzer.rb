@@ -4,7 +4,7 @@ require 'xcodeproj'
 #  If Xcode workspace path provided it collects the included projects
 #  If Xcode project path provided it returns the provided path as a singe element array
 # @param project_or_workspace_pth (String): Xcode project or workspace path
-# @return (Array): The contained projects  
+# @return (Array): The contained projects
 def contained_projects(project_or_workspace_pth)
   project_paths = []
   if File.extname(project_or_workspace_pth) == '.xcodeproj'
@@ -22,15 +22,15 @@ def contained_projects(project_or_workspace_pth)
   project_paths
 end
 
-# Collects target bundle ids and related entitlements
+# Collects target bundle ids
 # @param project_or_workspace_pth (String): Xcode project or workspace path
-# @return (Hash) {Hash[project_path][bundle_id][code_sign_entitlements_path]}: The contained projects 
-def get_project_bundle_id_entitlements_map(project_or_workspace_pth)
-  project_info_mapping = {}
+# @return (Hash - project_path (String) <-> bundle_ids (Array)) : bundle ids per project
+def get_project_bundle_ids(project_or_workspace_pth)
+  project_bundle_ids_map = {}
 
   project_paths = contained_projects(project_or_workspace_pth)
   project_paths.each do |project_path|
-    target_info_mapping = {}
+    target_bundle_ids = []
 
     project = Xcodeproj::Project.open(project_path)
     project.targets.each do |target|
@@ -40,19 +40,14 @@ def get_project_bundle_id_entitlements_map(project_or_workspace_pth)
         build_settings = build_configuration.build_settings
 
         bundle_identifier = build_settings['PRODUCT_BUNDLE_IDENTIFIER']
-        code_sign_entitlements = build_settings['CODE_SIGN_ENTITLEMENTS']
-
-        code_sign_entitlements_path = ''
-        code_sign_entitlements_path = File.join(File.expand_path('..', project_or_workspace_pth), code_sign_entitlements) unless code_sign_entitlements.to_s.empty?
-
-        target_info_mapping[bundle_identifier] = code_sign_entitlements_path
+        target_bundle_ids.push(bundle_identifier) unless target_bundle_ids.include?(bundle_identifier)
       end
     end
 
-    project_info_mapping[project_path] = target_info_mapping
+    project_bundle_ids_map[project_path] = target_bundle_ids
   end
 
-  project_info_mapping
+  project_bundle_ids_map
 end
 
 # Apply code sign settings
@@ -61,7 +56,6 @@ end
 # @param project_or_workspace_pth (String): Xcode project or workspace path
 # @param bundle_id_code_sing_info_map (Hash) {Hash[bundle_id][:development/:distribution]{certificate_path, certificate_passphrase, certificate, profile}}: Code sign settings
 # @param development_team (String): The development team's id
-# @return (Array): The contained projects  
 def force_code_sign_properties(project_or_workspace_pth, bundle_id_code_sing_info_map, development_team)
   project_paths = contained_projects(project_or_workspace_pth)
   project_paths.each do |project_path|

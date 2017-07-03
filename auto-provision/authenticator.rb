@@ -1,7 +1,12 @@
 require 'fastlane'
 require 'spaceship'
 
-def developer_portal_sign_in(username, password, two_factor_session, team_id)
+# Authenticate user on Apple Developer Portal
+# @param username (String): Apple Developer Portal user name
+# @param password (String): Apple Developer Portal password
+# @param two_factor_session (String) (Optional): 2FA session token
+# @param team_id (String) (Optional): Development team to sign in
+def developer_portal_authentication(username, password, two_factor_session = nil, team_id = nil)
   ENV['FASTLANE_PASSWORD'] = password
   ENV['FASTLANE_SESSION'] = two_factor_session unless two_factor_session.to_s.empty?
 

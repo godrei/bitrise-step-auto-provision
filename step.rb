@@ -8,6 +8,8 @@ require_relative 'auto-provision/authenticator'
 require_relative 'auto-provision/downloader'
 require_relative 'auto-provision/generator'
 require_relative 'auto-provision/log'
+require_relative 'auto-provision/const'
+require_relative 'auto-provision/app_services'
 
 DEBUG_LOG = true
 
@@ -18,29 +20,25 @@ session = ENV['apple_developer_portal_session']
 team_id = ENV['apple_developer_portal_team_id']
 
 project_path = ENV['project_path']
-
 development_certificate_path = ENV['development_certificate_path']
 development_certificate_passphrase = ENV['development_certificate_passphrase']
-
 distributon_type = ENV['distributon_type']
 distribution_certificate_path = ENV['distribution_certificate_path']
 distribution_certificate_passphrase = ENV['distribution_certificate_passphrase']
 
 puts
 log_info('Params')
-puts "username: #{username}"
-puts "password: #{password}"
-puts "session: #{session}"
-puts "team_id: #{team_id}"
-puts
-puts "project_path: #{project_path}"
-puts
-puts "development_certificate_path: #{development_certificate_path}"
-puts "development_certificate_passphrase: #{development_certificate_passphrase}"
-puts
-puts "distributon_type: #{distributon_type}"
-puts "distribution_certificate_path: #{distribution_certificate_path}"
-puts "distribution_certificate_passphrase: #{distribution_certificate_passphrase}"
+log_input('username', username)
+log_secret_input('password', password)
+log_secret_input('session', session)
+log_input('team_id', team_id)
+
+log_input('project_path', project_path)
+log_input('development_certificate_path', development_certificate_path)
+log_secret_input('development_certificate_passphrase', development_certificate_passphrase)
+log_input('distributon_type', distributon_type)
+log_input('distribution_certificate_path', distribution_certificate_path)
+log_secret_input('distribution_certificate_passphrase', distribution_certificate_passphrase)
 
 if development_certificate_path.start_with?('file://')
   development_certificate_path = development_certificate_path.sub('file://', '')
@@ -79,22 +77,23 @@ end
 # Authentication
 puts
 log_info('Authentication')
-developer_portal_sign_in(username, password, session, team_id)
+developer_portal_authentication(username, password, session, team_id)
 log_done("authenticated: #{username}")
 
 # Analyze project
 bundle_id_code_sing_info_map = {}
 
-project_bundle_id_entitlements_map = get_project_bundle_id_entitlements_map(project_path)
-project_bundle_id_entitlements_map.each do |path, bundle_id_entitlements_map|
+project_bundle_ids_map = get_project_bundle_ids(project_path)
+project_bundle_ids_map.each do |path, bundle_ids|
   puts
   log_info("Analyzing project: #{path}")
 
-  bundle_id_entitlements_map.each do |bundle_id, entitlements_path|
-    log_details("  analyzing target with bundle id: #{bundle_id}")
-    log_details("  entitlements: #{entitlements_path}") unless entitlements_path.to_s.empty?
+  bundle_ids.each do |bundle_id|
+    log_details("analyzing target with bundle id: #{bundle_id}")
 
-    app = ensure_app(bundle_id, entitlements_path)
+    app = ensure_app(bundle_id)
+    update_app_services(path, app)
+
     certificate = find_portal_certificate(development_certificate_path, development_certificate_passphrase)
     profile = ensure_provisioning_profile(app, certificate, SupportedProvisionigProfileTypes::DEVELOPMENT)
 
@@ -136,27 +135,27 @@ bundle_id_code_sing_info_map.each do |bundle_id, code_sign_info|
   puts
   log_info("signing: #{bundle_id}")
 
-  log_details("  app: #{code_sign_info[:app].name}")
+  log_details("app: #{code_sign_info[:app].name}")
 
-  log_details("  certificate: #{code_sign_info[:development][:certificate].name}")
+  log_details("certificate: #{code_sign_info[:development][:certificate].name}")
   certificate_path = code_sign_info[:development][:certificate_path]
   passphrase = code_sign_info[:development][:certificate_passphrase]
   certificate_passphrase_map[certificate_path] = passphrase
 
   profile = code_sign_info[:development][:profile]
-  log_details("  profile: #{code_sign_info[:development][:profile].name}")
+  log_details("profile: #{code_sign_info[:development][:profile].name}")
   profile_path = download_profile(profile, tmp_dir)
   provisioning_profile_path_map['file://' + profile_path] = true
 
   next unless ditribution_provisioning_profile_type
 
-  log_details("  certificate: #{code_sign_info[:distribution][:certificate].name}")
+  log_details("certificate: #{code_sign_info[:distribution][:certificate].name}")
   certificate_path = code_sign_info[:distribution][:certificate_path]
   passphrase = code_sign_info[:distribution][:certificate_passphrase]
   certificate_passphrase_map[certificate_path] = passphrase
 
   profile = code_sign_info[:distribution][:profile]
-  log_details("  profile: #{code_sign_info[:distribution][:profile].name}")
+  log_details("profile: #{code_sign_info[:distribution][:profile].name}")
   profile_path = download_profile(profile, tmp_dir)
   provisioning_profile_path_map['file://' + profile_path] = true
 end
