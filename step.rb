@@ -1,19 +1,127 @@
 require 'net/http'
+require 'uri'
+require 'json'
 
 require 'fastlane'
 require 'spaceship'
 
+require_relative 'log/log'
+require_relative 'bitrise/bitrise'
+require_relative 'xcodeproj/xcodeproj'
 require_relative 'auto-provision/analyzer'
 require_relative 'auto-provision/authenticator'
 require_relative 'auto-provision/downloader'
 require_relative 'auto-provision/generator'
-require_relative 'auto-provision/log'
 require_relative 'auto-provision/const'
 require_relative 'auto-provision/app_services'
 
 DEBUG_LOG = true
 
-# Params
+begin
+  # Params
+  build_url = ENV['build_url'] || ''
+  build_api_token = ENV['build_api_token'] || ''
+  team_id = ENV['team_id'] || ''
+
+  certificate_urls = ENV['certificate_urls'] || ''
+  certificate_passphrases = ENV['certificate_passphrases'] || ''
+  distributon_type = ENV['distributon_type'] || ''
+  project_path = ENV['project_path'] || ''
+
+  project = Project.new(project_path)
+  project_targets = project.project_targets_map
+  puts "project_targets: #{project_targets}"
+
+  project_targets.each do |path, targets|
+    targets.each do |target|
+      settings = project.xcodebuild_target_build_settings(path, target)
+      bundle_id = project.bundle_id_build_settings(settings)
+      puts "bundle_id: #{bundle_id}"
+
+      entitlements = project.entitlements_path_build_settings(settings, File.dirname(path))
+      puts "entitlements: #{entitlements}"
+    end
+  end
+  exit 1
+
+  puts
+
+  log_info('authentication Params:')
+  log_input('build_url', build_url)
+  log_input('build_api_token', build_api_token)
+  log_input('team_id', team_id)
+
+  log_info('auto-provision Params:')
+  log_input('certificate_urls', certificate_urls)
+  log_input('certificate_passphrases', certificate_passphrases)
+  log_input('distributon_type', distributon_type)
+  log_input('distributon_type', distributon_type)
+  log_input('distributon_type', distributon_type)
+
+  puts
+
+  raise 'missing: build_url' if build_url.empty?
+  raise 'missing: build_api_token' if build_api_token.empty?
+  raise 'missing: team_id' if team_id.empty?
+
+  raise 'missing: certificate_urls' if certificate_urls.empty?
+  raise 'missing: certificate_passphrases' if certificate_passphrases.empty?
+  raise 'missing: distributon_type' if distributon_type.empty?
+
+  # Developer portal data
+  response = get_developer_portal_data(build_url, build_api_token)
+  log_debug('')
+  log_debug("response.code: #{response.code}")
+  log_debug("response.body: #{response.body}")
+
+  if response.code != '200'
+    log_debug('')
+    log_debug('failed to get developer portal data')
+    log_debug("status: #{response.code}")
+    log_debug("body: #{response.body}")
+
+    developer_portal_data = JSON.parse(response.body) if response.body
+    raise developer_portal_data['error_msg'].to_s if developer_portal_data
+    raise 'failed to get developer portal data'
+  end
+
+  developer_portal_data = JSON.parse(response.body)
+
+  unless developer_portal_data['error_msg'].to_s.empty?
+    log_debug('')
+    log_debug('failed to get developer portal data')
+    log_debug("status: #{response.code}")
+    log_debug("body: #{response.body}")
+    raise developer_portal_data['error_msg'].to_s
+  end
+
+  user_name = developer_portal_data['apple_id']
+  password = developer_portal_data['password']
+  tfa_session = developer_portal_data['session_cookies']
+  devices = developer_portal_data['test_devices']
+
+  log_debug('')
+  log_debug("user_name: #{user_name}")
+  log_debug("password: #{password}")
+  log_debug("tfa_session: #{tfa_session}")
+  log_debug("devices: #{devices}")
+
+  # Spaceship auth
+  session = convert_tfa_cookies(tfa_session)
+  log_debug('')
+  log_debug("session: #{session}")
+
+  developer_portal_authentication(user_name, password, session, team_id)
+
+  #
+
+  exit 1
+rescue => ex
+  puts
+  log_error(ex.to_s + "\n" + ex.backtrace.join("\n"))
+  exit 1
+end
+
 username = ENV['apple_developer_portal_user']
 password = ENV['apple_developer_portal_password']
 session = ENV['apple_developer_portal_session']
@@ -25,6 +133,7 @@ development_certificate_passphrase = ENV['development_certificate_passphrase']
 distributon_type = ENV['distributon_type']
 distribution_certificate_path = ENV['distribution_certificate_path']
 distribution_certificate_passphrase = ENV['distribution_certificate_passphrase']
+distributon_type = ENV['distributon_type']
 
 puts
 log_info('Params')
@@ -71,7 +180,7 @@ when 'development'
 when 'none'
   ditribution_provisioning_profile_type = nil
 else
-  log_error('invalid distribution type: #{distributon_type}')
+  log_error("invalid distribution type: #{distributon_type}")
 end
 
 # Authentication

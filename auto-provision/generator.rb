@@ -16,10 +16,7 @@ def ensure_app(bundle_id)
 end
 
 def certificate_matches(certificate1, certificate2)
-  return false unless certificate1.subject == certificate2.subject
-  return false unless certificate1.issuer == certificate2.issuer
-  return false unless certificate1.serial == certificate2.serial
-  true
+  certificate1.serial == certificate2.serial
 end
 
 def find_portal_certificate(local_certificate_path, local_certificate_passphrase)
