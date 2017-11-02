@@ -2,8 +2,8 @@ require 'xcodeproj'
 require 'json'
 require 'plist'
 
-# Project ...
-class Project
+# ProjectHelper ...
+class ProjectHelper
   def initialize(project_or_workspace_path)
     extname = File.extname(project_or_workspace_path)
     case extname
@@ -79,13 +79,13 @@ class Project
     bundle_id
   end
 
-  def entitlements_path_build_settings(build_settings, project_dir)
-    entitlements = build_settings['CODE_SIGN_ENTITLEMENTS'] || ''
-    unless entitlements.to_s.empty?
-      entitlements = File.join(project_dir, entitlements)
+  def entitlements_build_settings(build_settings, project_dir)
+    entitlements_path = build_settings['CODE_SIGN_ENTITLEMENTS'] || ''
+    unless entitlements_path.to_s.empty?
+      entitlements_path = File.join(project_dir, entitlements_path)
     end
 
-    entitlements
+    Plist.parse_xml(entitlements_path)
   end
 
   def project_targets_map

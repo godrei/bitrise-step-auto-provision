@@ -7,7 +7,7 @@ require 'spaceship'
 
 require_relative 'log/log'
 require_relative 'bitrise/bitrise'
-require_relative 'xcodeproj/xcodeproj'
+require_relative 'project_helper/project_helper'
 require_relative 'auto-provision/analyzer'
 require_relative 'auto-provision/authenticator'
 require_relative 'auto-provision/downloader'
@@ -28,24 +28,6 @@ begin
   distributon_type = ENV['distributon_type'] || ''
   project_path = ENV['project_path'] || ''
 
-  project = Project.new(project_path)
-  project_targets = project.project_targets_map
-  puts "project_targets: #{project_targets}"
-
-  project_targets.each do |path, targets|
-    targets.each do |target|
-      settings = project.xcodebuild_target_build_settings(path, target)
-      bundle_id = project.bundle_id_build_settings(settings)
-      puts "bundle_id: #{bundle_id}"
-
-      entitlements = project.entitlements_path_build_settings(settings, File.dirname(path))
-      puts "entitlements: #{entitlements}"
-    end
-  end
-  exit 1
-
-  puts
-
   log_info('authentication Params:')
   log_input('build_url', build_url)
   log_input('build_api_token', build_api_token)
@@ -55,8 +37,7 @@ begin
   log_input('certificate_urls', certificate_urls)
   log_input('certificate_passphrases', certificate_passphrases)
   log_input('distributon_type', distributon_type)
-  log_input('distributon_type', distributon_type)
-  log_input('distributon_type', distributon_type)
+  log_input('project_path', project_path)
 
   puts
 
@@ -67,6 +48,25 @@ begin
   raise 'missing: certificate_urls' if certificate_urls.empty?
   raise 'missing: certificate_passphrases' if certificate_passphrases.empty?
   raise 'missing: distributon_type' if distributon_type.empty?
+  raise 'missing: project_path' if project_path.empty?
+
+  # Analyze project
+  project_helper = ProjectHelper.new(project_path)
+
+  bundle_id_entitlements_map = {}
+
+  project_targets = project_helper.project_targets_map
+  project_targets.each do |path, targets|
+    targets.each do |target|
+      settings = project_helper.xcodebuild_target_build_settings(path, target)
+      bundle_id = project_helper.bundle_id_build_settings(settings)
+
+      entitlements = project_helper.entitlements_build_settings(settings, File.dirname(path))
+
+      bundle_id_entitlements_map[bundle_id] = entitlements
+    end
+  end
+  exit 1
 
   # Developer portal data
   response = get_developer_portal_data(build_url, build_api_token)
