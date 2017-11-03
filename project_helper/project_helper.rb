@@ -79,15 +79,6 @@ class ProjectHelper
     bundle_id
   end
 
-  def entitlements_build_settings(build_settings, project_dir)
-    entitlements_path = build_settings['CODE_SIGN_ENTITLEMENTS'] || ''
-    unless entitlements_path.to_s.empty?
-      entitlements_path = File.join(project_dir, entitlements_path)
-    end
-
-    Plist.parse_xml(entitlements_path)
-  end
-
   def project_targets_map
     project_targets = {}
 
@@ -106,5 +97,75 @@ class ProjectHelper
     end
 
     project_targets
+  end
+
+  def project_target_bundle_id_map
+    project_target_bundle_id = {}
+
+    project_targets = project_targets_map
+    project_targets.each do |path, targets|
+      target_bundle_id = {}
+
+      targets.each do |target|
+        settings = xcodebuild_target_build_settings(path, target)
+        bundle_id = bundle_id_build_settings(settings)
+        target_bundle_id[target] = bundle_id
+      end
+
+      project_target_bundle_id[path] = target_bundle_id
+    end
+
+    project_target_bundle_id
+  end
+
+  def project_target_entitlements_map
+    project_target_entitlements = {}
+
+    project_targets = project_targets_map
+    project_targets.each do |path, targets|
+      target_entitlements = {}
+
+      targets.each do |target|
+        entitlements = []
+        settings = xcodebuild_target_build_settings(path, target)
+        entitlements_path = settings['CODE_SIGN_ENTITLEMENTS']
+        unless entitlements_path.to_s.empty?
+          project_dir = File.dirname(path)
+          entitlements_path = File.join(project_dir, entitlements_path)
+          entitlements = Plist.parse_xml(entitlements_path)
+        end
+
+        target_entitlements[target] = entitlements
+      end
+
+      project_target_entitlements[path] = target_entitlements
+    end
+
+    project_target_entitlements
+  end
+
+  def force_code_sign_properties(project_path, target, development_team, code_sign_identity, provisioning_profile_uuid)
+    project = Xcodeproj::Project.open(project_path)
+    project.targets.each do |target_obj|
+      next if target_obj.name == target
+
+      # force manual code singing
+      target_id = target_obj.uuid
+      attributes = project.root_object.attributes['TargetAttributes']
+      target_attributes = attributes[target_id]
+      target_attributes['ProvisioningStyle'] = 'Manual'
+
+      # apply code sign properties
+      target_obj.build_configuration_list.build_configurations.each do |build_configuration|
+        build_settings = build_configuration.build_settings
+
+        build_settings['DEVELOPMENT_TEAM'] = development_team
+        build_settings['CODE_SIGN_IDENTITY'] = code_sign_identity
+        build_settings['PROVISIONING_PROFILE'] = provisioning_profile_uuid
+        build_settings['CODE_SIGN_STYLE'] = 'Manual'
+      end
+    end
+
+    project.save
   end
 end

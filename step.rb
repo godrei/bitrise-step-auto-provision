@@ -8,9 +8,8 @@ require 'spaceship'
 require_relative 'log/log'
 require_relative 'bitrise/bitrise'
 require_relative 'project_helper/project_helper'
-require_relative 'auto-provision/analyzer'
+require_relative 'file_helper/file_helper'
 require_relative 'auto-provision/authenticator'
-require_relative 'auto-provision/downloader'
 require_relative 'auto-provision/generator'
 require_relative 'auto-provision/const'
 require_relative 'auto-provision/app_services'
@@ -39,81 +38,208 @@ begin
   log_input('distributon_type', distributon_type)
   log_input('project_path', project_path)
 
-  puts
+  raise 'missing: build_url' if build_url.to_s.empty?
+  raise 'missing: build_api_token' if build_api_token.to_s.empty?
+  raise 'missing: team_id' if team_id.to_s.empty?
 
-  raise 'missing: build_url' if build_url.empty?
-  raise 'missing: build_api_token' if build_api_token.empty?
-  raise 'missing: team_id' if team_id.empty?
+  raise 'missing: certificate_urls' if certificate_urls.to_s.empty?
+  raise 'missing: distributon_type' if distributon_type.to_s.empty?
+  raise 'missing: project_path' if project_path.to_s.empty?
 
-  raise 'missing: certificate_urls' if certificate_urls.empty?
-  raise 'missing: certificate_passphrases' if certificate_passphrases.empty?
-  raise 'missing: distributon_type' if distributon_type.empty?
-  raise 'missing: project_path' if project_path.empty?
+  ditribution_provisioning_profile_type = nil
+  case distributon_type
+  when 'app-store'
+    ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::APP_STORE
+  when 'ad-hoc'
+    ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::AD_HOC
+  when 'enterprise'
+    ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::IN_HOUSE
+  when 'development'
+    ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::DEVELOPMENT
+  when 'none'
+    ditribution_provisioning_profile_type = nil
+  else
+    log_error("invalid distribution type: #{distributon_type}")
+  end
+  ###
 
-  # Analyze project
-  project_helper = ProjectHelper.new(project_path)
+  # Download certificates
+  certificate_split = []
+  if certificate_urls.include?('|')
+    split = certificate_urls.split('|')
+    certificate_split = split.map(&:strip)
+  else
+    certificate_split.push(certificate_urls)
+  end
 
-  bundle_id_entitlements_map = {}
-
-  project_targets = project_helper.project_targets_map
-  project_targets.each do |path, targets|
-    targets.each do |target|
-      settings = project_helper.xcodebuild_target_build_settings(path, target)
-      bundle_id = project_helper.bundle_id_build_settings(settings)
-
-      entitlements = project_helper.entitlements_build_settings(settings, File.dirname(path))
-
-      bundle_id_entitlements_map[bundle_id] = entitlements
+  passphrase_split = []
+  if certificate_passphrases.include?('|')
+    separator_count = certificate_passphrases.count('|')
+    if certificate_passphrases.length == separator_count
+      passphrase_split = Array.new(separator_count + 1, '')
+    else
+      split = certificate_passphrases.split('|')
+      passphrase_split = split.map(&:strip)
     end
-  end
-  exit 1
-
-  # Developer portal data
-  response = get_developer_portal_data(build_url, build_api_token)
-  log_debug('')
-  log_debug("response.code: #{response.code}")
-  log_debug("response.body: #{response.body}")
-
-  if response.code != '200'
-    log_debug('')
-    log_debug('failed to get developer portal data')
-    log_debug("status: #{response.code}")
-    log_debug("body: #{response.body}")
-
-    developer_portal_data = JSON.parse(response.body) if response.body
-    raise developer_portal_data['error_msg'].to_s if developer_portal_data
-    raise 'failed to get developer portal data'
+  else
+    passphrase_split.push(certificate_passphrases)
   end
 
-  developer_portal_data = JSON.parse(response.body)
+  raise "certificates count (#{certificate_split.length}) and passphrases count (#{passphrase_split.length}) should match" unless certificate_split.length == passphrase_split.length
 
-  unless developer_portal_data['error_msg'].to_s.empty?
-    log_debug('')
-    log_debug('failed to get developer portal data')
-    log_debug("status: #{response.code}")
-    log_debug("body: #{response.body}")
-    raise developer_portal_data['error_msg'].to_s
-  end
+  certificate_passphrase_map = create_certificate_path_passphrase_map(certificate_split, passphrase_split)
+  puts "\ncertificate_passphrase_map: #{certificate_passphrase_map}"
+  ###
 
+  # Bitrise developer portal data
+  developer_portal_data = get_developer_portal_data(build_url, build_api_token)
   user_name = developer_portal_data['apple_id']
   password = developer_portal_data['password']
   tfa_session = developer_portal_data['session_cookies']
   devices = developer_portal_data['test_devices']
 
-  log_debug('')
-  log_debug("user_name: #{user_name}")
-  log_debug("password: #{password}")
-  log_debug("tfa_session: #{tfa_session}")
-  log_debug("devices: #{devices}")
+  puts("\nuser_name: #{user_name}")
+  puts("password: #{password}")
+  puts("tfa_session: #{tfa_session}")
+  puts("devices: #{devices}")
+  ###
 
   # Spaceship auth
   session = convert_tfa_cookies(tfa_session)
-  log_debug('')
-  log_debug("session: #{session}")
+  puts("\nsession: #{session}")
 
   developer_portal_authentication(user_name, password, session, team_id)
+  puts("\nspaceship authenticated")
+  ###
 
-  #
+  # Generate code sign files
+  project_helper = ProjectHelper.new(project_path)
+  project_target_bundle_id = project_helper.project_target_bundle_id_map
+  project_target_entitlements = project_helper.project_target_entitlements_map
+
+  puts "\nproject_target_bundle_id: #{JSON.pretty_generate(project_target_bundle_id)}"
+  puts "\nproject_target_entitlements: #{JSON.pretty_generate(project_target_entitlements)}"
+
+  development_portal_certificate = nil
+  production_portal_certificate = nil
+
+  code_sign_info = {}
+  certificate_passphrase_map.each do |certificate_path, passphrase|
+    portal_certificate = find_development_portal_certificate(certificate_path, passphrase)
+    if portal_certificate
+      puts "\nportal development certificate found: #{portal_certificate.name}"
+      raise 'multiple development certificate provided: step can handle only one development (and only one production) certificate' if development_portal_certificate
+
+      development_portal_certificate = portal_certificate
+
+      code_sign_info[:development_certificate] = {
+        path: certificate_path,
+        certificate: portal_certificate,
+        passphrase: passphrase
+      }
+    end
+
+    portal_certificate = find_production_portal_certificate(certificate_path, passphrase)
+    next unless portal_certificate
+
+    puts "\nportal prodcution certificate found: #{portal_certificate.name}"
+    raise 'multiple production certificate provided: step can handle only one production (and only one development) certificate' if production_portal_certificate
+
+    production_portal_certificate = portal_certificate
+
+    code_sign_info[:production_certificate] = {
+      path: certificate_path,
+      certificate: portal_certificate,
+      passphrase: passphrase
+    }
+  end
+
+  raise 'no development nor production certificate identified on development portal' if development_portal_certificate.nil? && production_portal_certificate.nil?
+
+  project_target_bundle_id.each do |path, target_bundle_id|
+    target_entitlements = project_target_entitlements[path]
+
+    puts
+    log_info("analyzing project: #{path}")
+
+    target_bundle_id.each do |target, bundle_id|
+      entitlements = target_entitlements[target]
+
+      log_details("analyzing target with bundle id: #{bundle_id}")
+
+      app = ensure_app(bundle_id)
+      update_app_services(app, entitlements)
+
+      if development_portal_certificate
+        profile = ensure_provisioning_profile(app, development_portal_certificate, SupportedProvisionigProfileTypes::DEVELOPMENT)
+        puts "using development profile: #{profile.name}"
+        profile_path = download_profile(profile)
+
+        projects = code_sign_info[:projects] || {}
+        target_info = projects[path] || {}
+        info = target_info[target] || {}
+        info[:app] = app unless info[:app]
+        info[:development_profile] = {
+          path: profile_path,
+          profile: profile
+        }
+
+        target_info[target] = info
+        projects[path] = target_info
+        code_sign_info[:projects] = projects
+      end
+
+      next unless production_portal_certificate
+
+      profile = ensure_provisioning_profile(app, production_portal_certificate, ditribution_provisioning_profile_type)
+      puts "using #{distributon_type} profile: #{profile.name}"
+      profile_path = download_profile(profile)
+
+      projects = code_sign_info[:projects] || {}
+      target_info = projects[path] || {}
+      info = target_info[target] || {}
+      info[:app] = app unless info[:app]
+      info[:production_profile] = {
+        path: profile_path,
+        profile: profile
+      }
+
+      target_info[target] = info
+      projects[path] = target_info
+      code_sign_info[:projects] = projects
+    end
+  end
+
+  puts("\ncode sign info:\n#{JSON.pretty_generate(code_sign_info)}")
+  ###
+
+  # Force code sign setting in project
+  project_infos = code_sign_info[:projects]
+  project_infos.each do |path, target_info|
+    target_info.each do |target, info|
+      certificate = nil
+      profile = nil
+
+      if code_sign_info[:development_certificate]
+        certificate = code_sign_info[:development_certificate][:certificate]
+        profile = info[:development_profile][:profile]
+      else 
+        certificate = code_sign_info[:production_certificate][:certificate]
+        profile = info[:production_profile][:profile]
+      end
+
+      team_id = certificate.owner_id
+      code_sign_identity = certificate.name
+      provisioning_profile_uuid = profile.uuid
+  
+      project_helper.force_code_sign_properties(path, target, team_id, code_sign_identity, provisioning_profile_uuid)
+    end
+  end
+  ###
+
+  # Export output
+  
+  ###
 
   exit 1
 rescue => ex
@@ -121,120 +247,6 @@ rescue => ex
   log_error(ex.to_s + "\n" + ex.backtrace.join("\n"))
   exit 1
 end
-
-username = ENV['apple_developer_portal_user']
-password = ENV['apple_developer_portal_password']
-session = ENV['apple_developer_portal_session']
-team_id = ENV['apple_developer_portal_team_id']
-
-project_path = ENV['project_path']
-development_certificate_path = ENV['development_certificate_path']
-development_certificate_passphrase = ENV['development_certificate_passphrase']
-distributon_type = ENV['distributon_type']
-distribution_certificate_path = ENV['distribution_certificate_path']
-distribution_certificate_passphrase = ENV['distribution_certificate_passphrase']
-distributon_type = ENV['distributon_type']
-
-puts
-log_info('Params')
-log_input('username', username)
-log_secret_input('password', password)
-log_secret_input('session', session)
-log_input('team_id', team_id)
-
-log_input('project_path', project_path)
-log_input('development_certificate_path', development_certificate_path)
-log_secret_input('development_certificate_passphrase', development_certificate_passphrase)
-log_input('distributon_type', distributon_type)
-log_input('distribution_certificate_path', distribution_certificate_path)
-log_secret_input('distribution_certificate_passphrase', distribution_certificate_passphrase)
-
-if development_certificate_path.start_with?('file://')
-  development_certificate_path = development_certificate_path.sub('file://', '')
-else
-  tmp_dir = Dir.mktmpdir
-  certificate_path = File.join(tmp_dir, 'DevelopmentCertificate.p12')
-  raise 'failed to download certificate' unless system("wget -q -O \"#{certificate_path}\" \"#{development_certificate_path}\"")
-  development_certificate_path = certificate_path
-end
-
-if distribution_certificate_path.start_with?('file://')
-  distribution_certificate_path = distribution_certificate_path.sub('file://', '')
-else
-  tmp_dir = Dir.mktmpdir
-  certificate_path = File.join(tmp_dir, 'DistributionCertificate.p12')
-  raise 'failed to download certificate' unless system("wget -q -O \"#{certificate_path}\" \"#{distribution_certificate_path}\"")
-  distribution_certificate_path = certificate_path
-end
-
-ditribution_provisioning_profile_type = nil
-case distributon_type
-when 'app-store'
-  ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::APP_STORE
-when 'ad-hoc'
-  ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::AD_HOC
-when 'enterprise'
-  ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::IN_HOUSE
-when 'development'
-  ditribution_provisioning_profile_type = SupportedProvisionigProfileTypes::DEVELOPMENT
-when 'none'
-  ditribution_provisioning_profile_type = nil
-else
-  log_error("invalid distribution type: #{distributon_type}")
-end
-
-# Authentication
-puts
-log_info('Authentication')
-developer_portal_authentication(username, password, session, team_id)
-log_done("authenticated: #{username}")
-
-# Analyze project
-bundle_id_code_sing_info_map = {}
-
-project_bundle_ids_map = get_project_bundle_ids(project_path)
-project_bundle_ids_map.each do |path, bundle_ids|
-  puts
-  log_info("Analyzing project: #{path}")
-
-  bundle_ids.each do |bundle_id|
-    log_details("analyzing target with bundle id: #{bundle_id}")
-
-    app = ensure_app(bundle_id)
-    update_app_services(path, app)
-
-    certificate = find_portal_certificate(development_certificate_path, development_certificate_passphrase)
-    profile = ensure_provisioning_profile(app, certificate, SupportedProvisionigProfileTypes::DEVELOPMENT)
-
-    development_code_sign_info_map = {
-      certificate: certificate,
-      certificate_path: development_certificate_path,
-      certificate_passphrase: development_certificate_passphrase,
-      profile: profile
-    }
-
-    bundle_id_code_sing_info_map[bundle_id] = {
-      app: app,
-      development: development_code_sign_info_map
-    }
-
-    next unless ditribution_provisioning_profile_type
-
-    certificate = find_portal_certificate(distribution_certificate_path, distribution_certificate_passphrase)
-    profile = ensure_provisioning_profile(app, certificate, ditribution_provisioning_profile_type)
-
-    distribution_code_sign_info_map = {
-      certificate_path: distribution_certificate_path,
-      certificate_passphrase: distribution_certificate_passphrase,
-      certificate: certificate,
-      profile: profile
-    }
-
-    bundle_id_code_sing_info_map[bundle_id][:distribution] = distribution_code_sign_info_map
-  end
-end
-
-force_code_sign_properties(project_path, bundle_id_code_sing_info_map, team_id)
 
 certificate_passphrase_map = {}
 provisioning_profile_path_map = {}

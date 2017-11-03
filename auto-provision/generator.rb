@@ -8,6 +8,8 @@ def ensure_app(bundle_id)
     normalized_bundle_id = bundle_id.tr('.', ' ')
     log_debug("generating app with bundle id (#{bundle_id})")
     app = Spaceship::Portal.app.create!(bundle_id: bundle_id, name: "Bitrise - (#{normalized_bundle_id})")
+  else
+    log_debug("app with bundle id (#{bundle_id}) already exist")
   end
 
   raise "failed to ensure app with bundle id: #{bundle_id}" unless app
@@ -19,7 +21,7 @@ def certificate_matches(certificate1, certificate2)
   certificate1.serial == certificate2.serial
 end
 
-def find_portal_certificate(local_certificate_path, local_certificate_passphrase)
+def find_development_portal_certificate(local_certificate_path, local_certificate_passphrase)
   p12 = OpenSSL::PKCS12.new(File.read(local_certificate_path), local_certificate_passphrase)
   local_certificate = p12.certificate
 
@@ -30,6 +32,13 @@ def find_portal_certificate(local_certificate_path, local_certificate_passphrase
     return cert if certificate_matches(local_certificate, portal_certificate)
   end
 
+  nil
+end
+
+def find_production_portal_certificate(local_certificate_path, local_certificate_passphrase)
+  p12 = OpenSSL::PKCS12.new(File.read(local_certificate_path), local_certificate_passphrase)
+  local_certificate = p12.certificate
+
   portal_production_certificates = Spaceship::Portal.certificate.production.all
   log_debug('no production certificate belongs to the account') if portal_production_certificates.to_a.empty?
   portal_production_certificates.each do |cert|
@@ -37,7 +46,7 @@ def find_portal_certificate(local_certificate_path, local_certificate_passphrase
     return cert if certificate_matches(local_certificate, portal_certificate)
   end
 
-  raise 'failed to find portal certificate'
+  nil
 end
 
 def ensure_provisioning_profile(app, certificate, profile_type)
@@ -52,12 +61,13 @@ def ensure_provisioning_profile(app, certificate, profile_type)
       profile = Spaceship::Portal.provisioning_profile.development.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise Development - (#{app.bundle_id})")
     else
       if profiles.count > 1
-        log_warning('multiple development provisionig profile found, using first:')
+        log_warning('multiple development provisionig profile found for bundle id, using first:')
         profiles.each_with_index { |prof, index| puts "#{index}, #{prof}" }
+      else
+        log_debug("development profile for bundle id (#{app.bundle_id}) already exist")
       end
 
       profile = profiles.first
-      profile = profile.repair!
     end
   when SupportedProvisionigProfileTypes::APP_STORE
     # Both app_store.all and ad_hoc.all return the same
@@ -75,10 +85,11 @@ def ensure_provisioning_profile(app, certificate, profile_type)
       if profiles.count > 1
         log_warning('multiple app store provisionig profile found, using first:')
         profiles.each_with_index { |prof, index| puts "#{index}, #{prof}" }
+      else
+        log_debug("app store profile for bundle id (#{app.bundle_id}) already exist")
       end
 
       profile = profiles.first
-      profile = profile.repair!
     end
   when SupportedProvisionigProfileTypes::AD_HOC
     # Both app_store.all and ad_hoc.all return the same
@@ -86,7 +97,7 @@ def ensure_provisioning_profile(app, certificate, profile_type)
     # and there is no fast way to get the type when fetching the profiles
     profiles_appstore_adhoc = Spaceship::Portal.provisioning_profile.ad_hoc.find_by_bundle_id(app.bundle_id)
     # Distinguish between App Store and Ad Hoc profiles
-    profiles = profiles_appstore_adhoc.find_all { |current| current.is_adhoc? }
+    profiles = profiles_appstore_adhoc.find_all(&:is_adhoc?)
 
     if profiles.to_a.empty?
       log_warning("no ad hoc provisioning profile found for bundle id: #{app.bundle_id}, generating ...")
@@ -96,10 +107,11 @@ def ensure_provisioning_profile(app, certificate, profile_type)
       if profiles.count > 1
         log_warning('multiple ad hoc provisionig profile found, using first:')
         profiles.each_with_index { |prof, index| puts "#{index}, #{prof}" }
+      else
+        log_debug("ad hoc profile for bundle id (#{app.bundle_id}) already exist")
       end
 
       profile = profiles.first
-      profile = profile.repair!
     end
   when SupportedProvisionigProfileTypes::IN_HOUSE
     profiles = Spaceship::Portal.provisioning_profile.in_house.find_by_bundle_id(app.bundle_id)
@@ -111,14 +123,14 @@ def ensure_provisioning_profile(app, certificate, profile_type)
       if profiles.count > 1
         log_warning('multiple enterprise provisionig profile found, using first:')
         profiles.each_with_index { |prof, index| puts "#{index}, #{prof}" }
+      else
+        log_debug("enterprise profile for bundle id (#{app.bundle_id}) already exist")
       end
 
       profile = profiles.first
-      profile = profile.repair!
     end
   end
 
   raise 'failed to ensure provisioning profile' unless profile
-
   profile
 end
