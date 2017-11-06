@@ -3,7 +3,6 @@ require 'uri'
 require 'json'
 
 require 'fastlane'
-require 'spaceship'
 
 require_relative 'log/log'
 require_relative 'bitrise/bitrise'
@@ -113,13 +112,7 @@ begin
   ###
 
   # Generate code sign files
-  project_helper = ProjectHelper.new(project_path)
-  project_target_bundle_id = project_helper.project_target_bundle_id_map
-  project_target_entitlements = project_helper.project_target_entitlements_map
-
-  puts "\nproject_target_bundle_id: #{JSON.pretty_generate(project_target_bundle_id)}"
-  puts "\nproject_target_entitlements: #{JSON.pretty_generate(project_target_entitlements)}"
-
+  # Find certificates
   development_portal_certificate = nil
   production_portal_certificate = nil
 
@@ -156,6 +149,17 @@ begin
 
   raise 'no development nor production certificate identified on development portal' if development_portal_certificate.nil? && production_portal_certificate.nil?
 
+  # Ensure test devices
+  test_devices = ensure_test_devices(devices)
+
+  # Ensure Profiles
+  project_helper = ProjectHelper.new(project_path)
+  project_target_bundle_id = project_helper.project_target_bundle_id_map
+  project_target_entitlements = project_helper.project_target_entitlements_map
+
+  puts "\nproject_target_bundle_id: #{JSON.pretty_generate(project_target_bundle_id)}"
+  puts "\nproject_target_entitlements: #{JSON.pretty_generate(project_target_entitlements)}"
+
   project_target_bundle_id.each do |path, target_bundle_id|
     target_entitlements = project_target_entitlements[path]
 
@@ -168,10 +172,10 @@ begin
       log_details("analyzing target with bundle id: #{bundle_id}")
 
       app = ensure_app(bundle_id)
-      update_app_services(app, entitlements)
+      sync_app_services(app, entitlements)
 
       if development_portal_certificate
-        profile = ensure_provisioning_profile(app, development_portal_certificate, SupportedProvisionigProfileTypes::DEVELOPMENT)
+        profile = ensure_provisioning_profile(development_portal_certificate, app, SupportedProvisionigProfileTypes::DEVELOPMENT, test_devices)
         puts "using development profile: #{profile.name}"
         profile_path = download_profile(profile)
 
@@ -191,7 +195,7 @@ begin
 
       next unless production_portal_certificate
 
-      profile = ensure_provisioning_profile(app, production_portal_certificate, ditribution_provisioning_profile_type)
+      profile = ensure_provisioning_profile(production_portal_certificate, app, ditribution_provisioning_profile_type, test_devices)
       puts "using #{distributon_type} profile: #{profile.name}"
       profile_path = download_profile(profile)
 
@@ -211,6 +215,8 @@ begin
   end
 
   puts("\ncode sign info:\n#{JSON.pretty_generate(code_sign_info)}")
+
+  exit 1
   ###
 
   # Force code sign setting in project
@@ -238,7 +244,7 @@ begin
   ###
 
   # Export output
-  
+
   ###
 
   exit 1

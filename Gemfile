@@ -1,7 +1,6 @@
 source 'https://rubygems.org'
 
-gem 'fastlane'
+gem 'fastlane', :github => 'fastlane/fastlane', :branch => 'master'
 gem 'openssl'
 gem 'plist'
-gem 'spaceship'
 gem 'xcodeproj'

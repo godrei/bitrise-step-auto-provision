@@ -22,6 +22,15 @@ def download_file(url, path)
     http.request(request)
   end
 
+  unless response.code == '200'
+    log_debug('')
+    log_debug('failed to download file')
+    log_debug("status: #{response.code}")
+    log_debug("body: #{response.body}")
+
+    raise 'failed to download file'
+  end
+
   io = open(path, 'w')
   chunk = response.read_body
   io.write(chunk)
@@ -34,6 +43,7 @@ def create_certificate_path_passphrase_map(certificate_urls, passphrases)
     certificate_path = nil
     if certificate_url.start_with?('file://')
       certificate_path = certificate_url.sub('file://', '')
+      raise "Certificate not exist at: #{certificate_path}" unless File.exist?(certificate_path)
     else
       certificate_path = create_tmp_file("Certificate#{idx}.p12")
       download_file(certificate_url, certificate_path)

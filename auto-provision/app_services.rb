@@ -1,71 +1,134 @@
 require 'fastlane'
-require 'spaceship'
 
 def update_app_services(app, entitlements)
   return if entitlements.nil? || entitlements.empty?
 
   entitlements.each do |entitlement_key, entitlement_value|
-    puts "entitlement_key: #{entitlement_key}"
-    puts "entitlement_value: #{entitlement_value}"
-
     case entitlement_key
-    when 'com.apple.security.application-groups'
-      puts "known: #{entitlement_value}"
-    when 'com.apple.developer.in-app-payments'
-      puts "known: #{entitlement_value}"
-    when 'com.apple.developer.associated-domains'
-      puts "known: #{entitlement_value}"
-    when 'com.apple.developer.default-data-protection'
-      puts "known: #{entitlement_value}"
 
+    when 'com.apple.security.application-groups'
+      puts "found #{entitlement_key}"
+      puts "set app_group: on"
+      app.update_service(Spaceship::Portal.app_service.app_group.on)
+
+    when 'com.apple.developer.in-app-payments'
+      puts "found #{entitlement_key}"
+      puts "set apple_pay: on"
+      app.update_service(Spaceship::Portal.app_service.apple_pay.on)
+
+    when 'com.apple.developer.associated-domains'
+      puts "found #{entitlement_key}"
+      puts "set associated_domains: on"
+      app.update_service(Spaceship::Portal.app_service.associated_domains.on)
+
+    when 'com.apple.developer.default-data-protection'
       case entitlement_value
       when 'NSFileProtectionComplete'
-      when 'NSFileProtectionCompleteUnlessOpen'
-      when 'NSFileProtectionCompleteUntilFirstUserAuthentication'
-      end
-    when 'com.apple.developer.healthkit'
-      puts "known: #{entitlement_value}"
-    when 'com.apple.developer.homekit'
-      puts "known: #{entitlement_value}"
-    when 'com.apple.external-accessory.wireless-configuration'
-      puts "known: #{entitlement_value}"
-    when 'com.apple.developer.icloud-container-identifiers'
-      puts "known: #{entitlement_value}"
-    when 'com.apple.developer.ubiquity-kvstore-identifier'
-      puts "known: #{entitlement_value}"
-    when 'com.apple.developer.icloud-services'
-      puts "known: #{entitlement_value}"
+        puts "found #{entitlement_key}"
+        puts "set data_protection: complete"
+        app.update_service(Spaceship::Portal.app_service.data_protection.complete)
 
+      when 'NSFileProtectionCompleteUnlessOpen'
+        puts "found #{entitlement_key}"
+        puts "set data_protection: unless_open"
+        app.update_service(Spaceship::Portal.app_service.data_protection.unless_open)
+
+      when 'NSFileProtectionCompleteUntilFirstUserAuthentication'
+        puts "found #{entitlement_key}"
+        puts "set data_protection: until_first_auth"
+        app.update_service(Spaceship::Portal.app_service.data_protection.until_first_auth)
+      end
+
+    when 'com.apple.developer.healthkit'
+      puts "found #{entitlement_key}"
+      puts "set health_kit: on"
+      app.update_service(Spaceship::Portal.app_service.health_kit.on)
+
+    when 'com.apple.developer.homekit'
+      puts "found #{entitlement_key}"
+      puts "set home_kit: on"
+      app.update_service(Spaceship::Portal.app_service.home_kit.on)
+
+    when 'com.apple.external-accessory.wireless-configuration'
+      puts "found #{entitlement_key}"
+      puts "set wireless_accessory: on"
+      app.update_service(Spaceship::Portal.app_service.wireless_accessory.on)
+
+    when 'com.apple.developer.icloud-container-identifiers'
+      puts "found #{entitlement_key}"
+      puts "app service depends on another entitlements key"
+
+    when 'com.apple.developer.ubiquity-kvstore-identifier'
+      puts "found #{entitlement_key}"
+      puts "set icloud: on"
+      app.update_service(Spaceship::Portal.app_service.icloud.on)
+
+    when 'com.apple.developer.icloud-services'
       case entitlement_value
       when 'CloudDocuments'
+        puts "found #{entitlement_key}"
+        puts "set cloud_kit: xcode5_compatible"
+        app.update_service(Spaceship::Portal.app_service.cloud_kit.xcode5_compatible)
+
       when 'CloudKit'
+        puts "found #{entitlement_key}"
+        puts "set cloud_kit: cloud_kit"
+        app.update_service(Spaceship::Portal.app_service.cloud_kit.cloud_kit)
+
       end
     when 'com.apple.InAppPurchase'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set in_app_purchase: on"
+      app.update_service(Spaceship::Portal.app_service.in_app_purchase.on)
+
     when 'inter-app-audio'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set inter_app_audio: on"
+      app.update_service(Spaceship::Portal.app_service.inter_app_audio.on)
+
     when 'com.apple.developer.pass-type-identifiers'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set passbook: on"
+      app.update_service(Spaceship::Portal.app_service.passbook.on)
+
     when 'aps-environment'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set push_notification: on"
+      app.update_service(Spaceship::Portal.app_service.push_notification.on)
+
     when 'com.apple.developer.siri'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set siri_kit: on"
+      app.update_service(Spaceship::Portal.app_service.siri_kit.on)
+
     when 'com.apple.developer.networking.vpn.api'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set vpn_configuration: on"
+      app.update_service(Spaceship::Portal.app_service.vpn_configuration.on)
+
     when 'com.apple.developer.networking.networkextension'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set network_extension: on"
+      app.update_service(Spaceship::Portal.app_service.network_extension.on)
+
     when 'com.apple.developer.networking.HotspotConfiguration'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set hotspot: on"
+      app.update_service(Spaceship::Portal.app_service.hotspot.on)
+
     when 'com.apple.developer.networking.multipath'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set multipath: on"
+      app.update_service(Spaceship::Portal.app_service.multipath.on)
+
     when 'com.apple.developer.nfc.readersession.formats'
-      puts "known: #{entitlement_value}"
+      puts "found #{entitlement_key}"
+      puts "set nfc_tag_reading: on"
+      app.update_service(Spaceship::Portal.app_service.nfc_tag_reading.on)
+
     else 
       puts "UNKOWN key: #{entitlement_key}"
     end
-
-    # gamecenter: on
-    # hotspot?
   end
 end
 
