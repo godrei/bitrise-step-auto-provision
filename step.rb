@@ -182,7 +182,8 @@ begin
         projects = code_sign_info[:projects] || {}
         target_info = projects[path] || {}
         info = target_info[target] || {}
-        info[:app] = app unless info[:app]
+
+        info[:app] = app
         info[:development_profile] = {
           path: profile_path,
           profile: profile
@@ -202,7 +203,7 @@ begin
       projects = code_sign_info[:projects] || {}
       target_info = projects[path] || {}
       info = target_info[target] || {}
-      info[:app] = app unless info[:app]
+      info[:app] = app
       info[:production_profile] = {
         path: profile_path,
         profile: profile
@@ -213,10 +214,6 @@ begin
       code_sign_info[:projects] = projects
     end
   end
-
-  puts("\ncode sign info:\n#{JSON.pretty_generate(code_sign_info)}")
-
-  exit 1
   ###
 
   # Force code sign setting in project
@@ -229,7 +226,7 @@ begin
       if code_sign_info[:development_certificate]
         certificate = code_sign_info[:development_certificate][:certificate]
         profile = info[:development_profile][:profile]
-      else 
+      else
         certificate = code_sign_info[:production_certificate][:certificate]
         profile = info[:production_profile][:profile]
       end
@@ -237,70 +234,50 @@ begin
       team_id = certificate.owner_id
       code_sign_identity = certificate.name
       provisioning_profile_uuid = profile.uuid
-  
+
       project_helper.force_code_sign_properties(path, target, team_id, code_sign_identity, provisioning_profile_uuid)
     end
   end
   ###
 
   # Export output
+  certificate_paths = ''
+  certificate_passphrases = ''
 
+  certificate_passphrase_map.each do |certificate_path, passphrase|
+    certificate_paths += '|' unless certificate_paths.empty?
+    certificate_paths += certificate_path
+
+    certificate_passphrases += '|' unless certificate_passphrases.empty?
+    certificate_passphrases += passphrase
+  end
+  raise 'failed to export BITRISE_CERTIFICATE_URL' unless system("envman add --key BITRISE_CERTIFICATE_URL --value \"#{certificate_paths}\"")
+  raise 'failed to export BITRISE_CERTIFICATE_PASSPHRASE' unless system("envman add --key BITRISE_CERTIFICATE_PASSPHRASE --value \"#{certificate_passphrases}\"")
+
+  profile_paths = ''
+
+  project_infos = code_sign_info[:projects]
+  project_infos.each_value do |target_info|
+    target_info.each_value do |info|
+
+      if code_sign_info[:development_certificate]
+        profile_path = info[:development_profile][:path]
+        profile_paths += '|' unless profile_paths.empty?
+        profile_paths += profile_path
+      end
+
+      next unless code_sign_info[:production_certificate]
+
+      profile_path = info[:production_profile][:path]
+      profile_paths += '|' unless profile_paths.empty?
+      profile_paths += profile_path
+
+    end
+  end
+  raise 'failed to export BITRISE_PROVISION_URL' unless system("envman add --key BITRISE_PROVISION_URL --value \"#{profile_paths}\"")
   ###
-
-  exit 1
 rescue => ex
   puts
   log_error(ex.to_s + "\n" + ex.backtrace.join("\n"))
   exit 1
 end
-
-certificate_passphrase_map = {}
-provisioning_profile_path_map = {}
-tmp_dir = Dir.mktmpdir
-
-bundle_id_code_sing_info_map.each do |bundle_id, code_sign_info|
-  puts
-  log_info("signing: #{bundle_id}")
-
-  log_details("app: #{code_sign_info[:app].name}")
-
-  log_details("certificate: #{code_sign_info[:development][:certificate].name}")
-  certificate_path = code_sign_info[:development][:certificate_path]
-  passphrase = code_sign_info[:development][:certificate_passphrase]
-  certificate_passphrase_map[certificate_path] = passphrase
-
-  profile = code_sign_info[:development][:profile]
-  log_details("profile: #{code_sign_info[:development][:profile].name}")
-  profile_path = download_profile(profile, tmp_dir)
-  provisioning_profile_path_map['file://' + profile_path] = true
-
-  next unless ditribution_provisioning_profile_type
-
-  log_details("certificate: #{code_sign_info[:distribution][:certificate].name}")
-  certificate_path = code_sign_info[:distribution][:certificate_path]
-  passphrase = code_sign_info[:distribution][:certificate_passphrase]
-  certificate_passphrase_map[certificate_path] = passphrase
-
-  profile = code_sign_info[:distribution][:profile]
-  log_details("profile: #{code_sign_info[:distribution][:profile].name}")
-  profile_path = download_profile(profile, tmp_dir)
-  provisioning_profile_path_map['file://' + profile_path] = true
-end
-
-certificate_paths = []
-certificate_passphrases = []
-
-certificate_passphrase_map.each do |certificate, passphrase|
-  certificate_paths.push('file://' + certificate)
-  certificate_passphrases.push(passphrase)
-end
-
-certificate_path_list = certificate_paths.join('|')
-certificate_passphrase_list = certificate_passphrases.join('|')
-provisioning_profile_path_list = provisioning_profile_path_map.keys.join('|')
-
-raise 'failed to export CERTIFICATE_PATH_LIST' unless system("envman add --key CERTIFICATE_PATH_LIST --value \"#{certificate_path_list}\"")
-raise 'failed to export CERTIFICATE_PASSPHRASE_LIST' unless system("envman add --key CERTIFICATE_PASSPHRASE_LIST --value \"#{certificate_passphrase_list}\"")
-raise 'failed to export PROVISIONING_PROFILE_PATH_LIST' unless system("envman add --key PROVISIONING_PROFILE_PATH_LIST --value \"#{provisioning_profile_path_list}\"")
-
-exit(0)
