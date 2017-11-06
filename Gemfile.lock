@@ -1,6 +1,6 @@
 GIT
   remote: git://github.com/fastlane/fastlane.git
-  revision: f925bdccf0fcdeda75365b0896c3b789294079a4
+  revision: 9f82d38a04d0030ac5c4a7b7b3ad193331221b75
   branch: master
   specs:
     fastlane (2.63.0)
