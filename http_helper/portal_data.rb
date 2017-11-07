@@ -44,7 +44,10 @@ class PortalData
     log_details("apple_id: #{@apple_id}")
     log_details("password: #{@password}")
     log_details("session_cookies: #{@session_cookies}")
-    log_details("test_devices: #{@test_devices}")
+    log_details("test_devices:")
+    @test_devices.each do |device|
+      log_details("- #{device.name} (#{device.uuid})")
+    end
   end
 
   def validate

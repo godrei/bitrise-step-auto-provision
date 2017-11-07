@@ -52,7 +52,6 @@ def ensure_test_devices(test_devices)
   updated_portal_devices = []
   portal_devices = Spaceship::Portal.device.all(mac: false, include_disabled: true) || []
   test_devices.each do |test_device|
-    test_device.print
     registered_test_device = nil
 
     portal_devices.each do |portal_device|

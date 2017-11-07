@@ -10,7 +10,6 @@ require_relative 'http_helper/http_helper'
 require_relative 'http_helper/portal_data'
 require_relative 'auto-provision/authenticator'
 require_relative 'auto-provision/generator'
-require_relative 'auto-provision/const'
 require_relative 'auto-provision/app_services'
 
 DEBUG_LOG = true
@@ -112,6 +111,7 @@ begin
     portal_certificate = find_development_portal_certificate(certificate_path, passphrase)
     if portal_certificate
       log_done("\nportal development certificate found: #{portal_certificate.name}")
+      log_done("team: #{portal_certificate.owner_name} (#{portal_certificate.owner_id})")
       raise 'multiple development certificate provided: step can handle only one development (and only one production) certificate' if path_development_certificate_map[certificate_path]
 
       path_development_certificate_map[certificate_path] = portal_certificate
@@ -122,6 +122,7 @@ begin
     next unless portal_certificate
 
     log_done("\nportal prodcution certificate found: #{portal_certificate.name}")
+    log_done("team: #{portal_certificate.owner_name} (#{portal_certificate.owner_id})")
     raise 'multiple production certificate provided: step can handle only one production (and only one development) certificate' if path_production_certificate_map[certificate_path]
 
     path_production_certificate_map[certificate_path] = portal_certificate
@@ -171,6 +172,8 @@ begin
         profile_path = download_profile(profile)
         target_development_profile_path_map[target] = profile_path
       end
+
+      next if params.distributon_type == 'development'
 
       production_portal_certificate = path_production_certificate_map.values[0] unless path_production_certificate_map.empty?
       next unless production_portal_certificate
