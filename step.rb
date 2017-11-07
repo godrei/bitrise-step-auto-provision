@@ -92,12 +92,12 @@ begin
   # Developer Portal authentication
   portal_data = get_developer_portal_data(params.build_url, params.build_api_token)
   portal_data.print if DEBUG_LOG
-  portal_data.validat
+  portal_data.validate
 
-  session = convert_tfa_cookies(portal_data.tfa_session)
+  session = convert_tfa_cookies(portal_data.session_cookies)
   log_debug("\nsession: #{session}")
 
-  developer_portal_authentication(portal_data.user_name, portal_data.password, session, portal_data.team_id)
+  developer_portal_authentication(portal_data.apple_id, portal_data.password, session, params.team_id)
   log_done("\ndeveloper portal authenticated")
   ###
 
@@ -122,7 +122,7 @@ begin
     next unless portal_certificate
 
     log_done("\nportal prodcution certificate found: #{portal_certificate.name}")
-    raise 'multiple production certificate provided: step can handle only one production (and only one development) certificate' if path_production_certificate_map[certificate_path] = portal_certificate
+    raise 'multiple production certificate provided: step can handle only one production (and only one development) certificate' if path_production_certificate_map[certificate_path]
 
     path_production_certificate_map[certificate_path] = portal_certificate
     path_production_certificate_passphrase_map[certificate_path] = passphrase
@@ -131,11 +131,11 @@ begin
   ###
 
   # Ensure test devices
-  test_devices = ensure_test_devices(devices)
+  test_devices = ensure_test_devices(portal_data.test_devices)
   ###
 
   # Ensure Profiles
-  project_helper = ProjectHelper.new(project_path)
+  project_helper = ProjectHelper.new(params.project_path)
   project_target_bundle_id = project_helper.project_target_bundle_id_map
   project_target_entitlements = project_helper.project_target_entitlements_map
 
@@ -178,7 +178,7 @@ begin
       profile = ensure_provisioning_profile(production_portal_certificate, app, params.distributon_type, test_devices)
       target_production_profile_map[target] = profile
 
-      log_details("using #{distributon_type} profile: #{profile.name}")
+      log_details("using #{params.distributon_type} profile: #{profile.name}")
       profile_path = download_profile(profile)
       target_production_profile_path_map[target] = profile_path
     end
@@ -187,18 +187,24 @@ begin
 
   # Force code sign setting in project
   project_target_bundle_id.each do |path, target_bundle_id|
-    target_bundle_id.each do |target, bundle_id|
+    target_bundle_id.each_key do |target|
       certificate = nil
       profile = nil
-  
+
       portal_certificate = path_development_certificate_map.values[0] unless path_development_certificate_map.empty?
-      portal_profile = target_development_profile_map.values[0] unless target_development_profile_map.empty?
       if portal_certificate
+        portal_profile = target_development_profile_map.values[0] unless target_development_profile_map.empty?
+
         certificate = portal_certificate
         profile = portal_profile
       else
         portal_certificate = path_production_certificate_map.values[0] unless path_production_certificate_map.empty?
-        portal_profile = target_production_profile_map.values[0] unless target_production_profile_map.empty?
+        if portal_certificate
+          portal_profile = target_production_profile_map.values[0] unless target_production_profile_map.empty?
+
+          certificate = portal_certificate
+          profile = portal_profile
+        end
       end
 
       team_id = certificate.owner_id
@@ -211,13 +217,13 @@ begin
   ###
 
   # Export output
-  certificate_paths = path_development_certificate_map.keys.concate(path_production_certificate_map.keys).reject(&:empty?).join("|")
+  certificate_paths = path_development_certificate_map.keys.concat(path_production_certificate_map.keys).reject(&:empty?).join('|')
   raise 'failed to export BITRISE_CERTIFICATE_URL' unless system("envman add --key BITRISE_CERTIFICATE_URL --value \"#{certificate_paths}\"")
 
-  certificate_passphrases = path_development_certificate_passphrase_map.values.concat(path_production_certificate_passphrase_map.values).reject(&:empty?).join("|")
+  certificate_passphrases = path_development_certificate_passphrase_map.values.concat(path_production_certificate_passphrase_map.values).reject(&:empty?).join('|')
   raise 'failed to export BITRISE_CERTIFICATE_PASSPHRASE' unless system("envman add --key BITRISE_CERTIFICATE_PASSPHRASE --value \"#{certificate_passphrases}\"")
 
-  profile_paths = target_development_profile_path_map.values.concat(target_production_profile_path_map.values).reject(&:empty?).join("|")
+  profile_paths = target_development_profile_path_map.values.concat(target_production_profile_path_map.values).reject(&:empty?).join('|')
   raise 'failed to export BITRISE_PROVISION_URL' unless system("envman add --key BITRISE_PROVISION_URL --value \"#{profile_paths}\"")
   ###
 rescue => ex

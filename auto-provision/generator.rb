@@ -52,19 +52,20 @@ def ensure_test_devices(test_devices)
   updated_portal_devices = []
   portal_devices = Spaceship::Portal.device.all(mac: false, include_disabled: true) || []
   test_devices.each do |test_device|
+    test_device.print
     registered_test_device = nil
 
-    portal_devices.each do  |portal_device|
-      if portal_device.udid == test_device.uuid
-        registered_test_device = portal_device
-        log_debug("Test device (#{test_device.title} - #{test_device.uid}) already registered")
-        break
-      end
+    portal_devices.each do |portal_device|
+      next unless portal_device.udid == test_device.uuid
+
+      registered_test_device = portal_device
+      log_debug("Test device (#{registered_test_device.name} - #{registered_test_device.udid}) already registered")
+      break
     end
 
-    unless found_portal_device
-      registered_test_device = Spaceship::Portal.device.create!(name: name, udid: uuid) 
-      log_debug("Creating test device (#{test_device.title} - #{test_device.uid})")
+    unless registered_test_device
+      registered_test_device = Spaceship::Portal.device.create!(name: test_device.name, udid: test_device.uuid)
+      log_debug("Created test device (#{registered_test_device.name} - #{registered_test_device.udid})")
     end
     raise 'failed to find or create device' unless registered_test_device
 
@@ -85,7 +86,7 @@ end
 
 def ensure_profile_certificate(profile, certificate)
   certificate_included = false
-  
+
   certificates = profile.certificates
   certificates.each do |cert|
     if cert.id == certificate.id
@@ -104,7 +105,7 @@ end
 
 def ensure_profile_devices(profile, devices)
   profile_devices = profile.devices
-  updated_devices = [].concate(profile_devices)
+  updated_devices = [].concat(profile_devices)
 
   devices.each do |device|
     device_included = false
@@ -206,7 +207,7 @@ def ensure_provisioning_profile(certificate, app, distributon_type, test_devices
 
     # register test devices
     profile = ensure_profile_devices(profile, test_devices)
-    
+
     profile = profile.update!
   when 'enterprise'
     profiles = find_profile_by_bundle_id(Spaceship::Portal.provisioning_profile.in_house.all, app.bundle_id)
@@ -226,7 +227,7 @@ def ensure_provisioning_profile(certificate, app, distributon_type, test_devices
 
       # ensure certificate is included
       profile = ensure_profile_certificate(profile, certificate)
-      
+
       profile = profile.update!
     end
   else

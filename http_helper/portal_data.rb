@@ -1,24 +1,24 @@
 # PortalData
 class PortalData
-
+  # TestDevice
   class TestDevice
     attr_accessor :uuid
     attr_accessor :name
 
     def initialize(json)
-        @uuid = json['device_identifier'] || ''
-        @name = json['title'] || ""
+      @uuid = json['device_identifier'] || ''
+      @name = json['title'] || ''
     end
 
     def print
-        log_info('Params:')
-        log_details("uuid: #{@uuid}")
-        log_details("name: #{@name}")
+      log_info('TestDevice:')
+      log_details("uuid: #{@uuid}")
+      log_details("name: #{@name}")
     end
 
     def validate
-        raise 'device uuid not porvided this build' if @uuid.empty?
-        raise 'device title not provided for this build' if @name.empty?
+      raise 'device uuid not porvided this build' if @uuid.empty?
+      raise 'device title not provided for this build' if @name.empty?
     end
   end
 
@@ -40,7 +40,7 @@ class PortalData
   end
 
   def print
-    log_info('Params:')
+    log_info('PortalData:')
     log_details("apple_id: #{@apple_id}")
     log_details("password: #{@password}")
     log_details("session_cookies: #{@session_cookies}")
@@ -52,7 +52,7 @@ class PortalData
     raise 'developer portal password not provided for this build' if @password.empty?
   end
 end
-  
+
 def get_developer_portal_data(build_url, build_api_token)
   url = "#{build_url}/apple_developer_portal_data.json"
   uri = URI.parse(url)
