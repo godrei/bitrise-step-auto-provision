@@ -202,4 +202,6 @@ def sync_app_services(app, entitlements)
     puts 'set wireless_accessory: off'
     app = app.update_service(Spaceship::Portal.app_service.wireless_accessory.off)
   end
+
+  app
 end

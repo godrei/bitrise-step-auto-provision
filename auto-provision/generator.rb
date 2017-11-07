@@ -5,13 +5,13 @@ def ensure_app(bundle_id)
   app = Spaceship::Portal.app.find(bundle_id)
   if app.nil?
     normalized_bundle_id = bundle_id.tr('.', ' ')
-    log_debug("generating app with bundle id (#{bundle_id})")
+    log_debug("\ngenerating app with bundle id (#{bundle_id})")
     app = Spaceship::Portal.app.create!(bundle_id: bundle_id, name: "Bitrise - (#{normalized_bundle_id})")
   else
-    log_debug("app with bundle id (#{bundle_id}) already exist")
+    log_debug("\napp with bundle id (#{bundle_id}) already exist")
   end
 
-  raise "failed to ensure app with bundle id: #{bundle_id}" unless app
+  raise "failed to find or create app with bundle id: #{bundle_id}" unless app
 
   app
 end
@@ -48,26 +48,30 @@ def find_production_portal_certificate(local_certificate_path, local_certificate
   nil
 end
 
-def ensure_test_devices(device_infos)
-  test_devices = []
+def ensure_test_devices(test_devices)
+  updated_portal_devices = []
+  portal_devices = Spaceship::Portal.device.all(mac: false, include_disabled: true) || []
+  test_devices.each do |test_device|
+    registered_test_device = nil
 
-  device_infos.each do |device_info|
-    uuid = device_info['device_identifier']
-    name = device_info['title']
-
-    device = Spaceship::Portal.device.find_by_udid(uuid, include_disabled: true)
-    if device.nil?
-      device = Spaceship::Portal.device.create!(name: name, udid: uuid)
-    else
-      device.enable!
+    portal_devices.each do  |portal_device|
+      if portal_device.udid == test_device.uuid
+        registered_test_device = portal_device
+        log_debug("Test device (#{test_device.title} - #{test_device.uid}) already registered")
+        break
+      end
     end
 
-    raise 'failed to find or create device' unless device
+    unless found_portal_device
+      registered_test_device = Spaceship::Portal.device.create!(name: name, udid: uuid) 
+      log_debug("Creating test device (#{test_device.title} - #{test_device.uid})")
+    end
+    raise 'failed to find or create device' unless registered_test_device
 
-    test_devices.push(device)
+    updated_portal_devices.push(registered_test_device)
   end
 
-  test_devices
+  updated_portal_devices
 end
 
 def find_profile_by_bundle_id(profiles, bundle_id)
@@ -79,11 +83,51 @@ def find_profile_by_bundle_id(profiles, bundle_id)
   matching
 end
 
-def ensure_provisioning_profile(certificate, app, profile_type, test_devices)
+def ensure_profile_certificate(profile, certificate)
+  certificate_included = false
+  
+  certificates = profile.certificates
+  certificates.each do |cert|
+    if cert.id == certificate.id
+      certificate_included = true
+      break
+    end
+  end
+
+  unless certificate_included
+    certificates.push(certificate)
+    profile.certificates = certificates
+  end
+
+  profile
+end
+
+def ensure_profile_devices(profile, devices)
+  profile_devices = profile.devices
+  updated_devices = [].concate(profile_devices)
+
+  devices.each do |device|
+    device_included = false
+
+    profile_devices.each do |profile_device|
+      if profile_device.udid == device.udid
+        device_included = true
+        break
+      end
+    end
+
+    updated_devices.push(device) unless device_included
+  end
+
+  profile.devices = updated_devices
+  profile
+end
+
+def ensure_provisioning_profile(certificate, app, distributon_type, test_devices)
   profile = nil
 
-  case profile_type
-  when SupportedProvisionigProfileTypes::DEVELOPMENT
+  case distributon_type
+  when 'development'
     profiles = find_profile_by_bundle_id(Spaceship::Portal.provisioning_profile.development.all, app.bundle_id)
     if profiles.to_a.empty?
       log_warning("no development provisioning profile found for bundle id: #{app.bundle_id}, generating ...")
@@ -100,36 +144,14 @@ def ensure_provisioning_profile(certificate, app, profile_type, test_devices)
       profile = profiles.first
 
       # ensure certificate is included
-      certificate_included = false
-
-      certificates = profile.certificates
-      certificates.each do |cert|
-        if cert.id == certificate.id
-          certificate_included = true
-          break
-        end
-      end
-
-      certificates.push(certificate) unless certificate_included
-      profile.certificates = certificates
-      profile = profile.update!
+      profile = ensure_profile_certificate(profile, certificate)
     end
 
     # register test devices
-    profile.devices.each do |device|
-      is_registered_on_bitrise = false
-      test_devices.each do |test_device|
-        if test_device.udid == device.udid
-          is_registered_on_bitrise = true
-          break
-        end
-      end
+    profile = ensure_profile_devices(profile, test_devices)
 
-      test_devices.push(device) unless is_registered_on_bitrise
-    end
-    profile.devices = test_devices
     profile = profile.update!
-  when SupportedProvisionigProfileTypes::APP_STORE
+  when 'app-store'
     # Both app_store.all and ad_hoc.all return the same
     # This is the case since September 2016, since the API has changed
     # and there is no fast way to get the type when fetching the profiles
@@ -152,21 +174,11 @@ def ensure_provisioning_profile(certificate, app, profile_type, test_devices)
       profile = profiles.first
 
       # ensure certificate is included
-      certificate_included = false
+      profile = ensure_profile_certificate(profile, certificate)
 
-      certificates = profile.certificates
-      certificates.each do |cert|
-        if cert.id == certificate.id
-          certificate_included = true
-          break
-        end
-      end
-
-      certificates.push(certificate) unless certificate_included
-      profile.certificates = certificates
       profile = profile.update!
     end
-  when SupportedProvisionigProfileTypes::AD_HOC
+  when 'ad-hoc'
     # Both app_store.all and ad_hoc.all return the same
     # This is the case since September 2016, since the API has changed
     # and there is no fast way to get the type when fetching the profiles
@@ -189,36 +201,14 @@ def ensure_provisioning_profile(certificate, app, profile_type, test_devices)
       profile = profiles.first
 
       # ensure certificate is included
-      certificate_included = false
-
-      certificates = profile.certificates
-      certificates.each do |cert|
-        if cert.id == certificate.id
-          certificate_included = true
-          break
-        end
-      end
-
-      certificates.push(certificate) unless certificate_included
-      profile.certificates = certificates
-      profile = profile.update!
+      profile = ensure_profile_certificate(profile, certificate)
     end
 
     # register test devices
-    profile.devices.each do |device|
-      is_registered_on_bitrise = false
-      test_devices.each do |test_device|
-        if test_device.udid == device.udid
-          is_registered_on_bitrise = true
-          break
-        end
-      end
-
-      test_devices.push(device) unless is_registered_on_bitrise
-    end
-    profile.devices = test_devices
+    profile = ensure_profile_devices(profile, test_devices)
+    
     profile = profile.update!
-  when SupportedProvisionigProfileTypes::IN_HOUSE
+  when 'enterprise'
     profiles = find_profile_by_bundle_id(Spaceship::Portal.provisioning_profile.in_house.all, app.bundle_id)
     if profiles.to_a.empty?
       log_warning("no enterprise provisioning profile found for bundle id: #{app.bundle_id}, generating ...")
@@ -235,20 +225,12 @@ def ensure_provisioning_profile(certificate, app, profile_type, test_devices)
       profile = profiles.first
 
       # ensure certificate is included
-      certificate_included = false
-
-      certificates = profile.certificates
-      certificates.each do |cert|
-        if cert.id == certificate.id
-          certificate_included = true
-          break
-        end
-      end
-
-      certificates.push(certificate) unless certificate_included
-      profile.certificates = certificates
+      profile = ensure_profile_certificate(profile, certificate)
+      
       profile = profile.update!
     end
+  else
+    raise "invalid distribution type provided: #{distributon_type}, available: []"
   end
 
   raise 'failed to ensure provisioning profile' unless profile

@@ -22,12 +22,3 @@ def log_debug(message)
   return unless DEBUG_LOG
   puts message.to_s
 end
-
-def log_secret_input(key, value)
-  puts key + ': ***' unless value.to_s.empty?
-  puts key + ':' if value.to_s.empty?
-end
-
-def log_input(key, value)
-  puts key + ': ' + value
-end
