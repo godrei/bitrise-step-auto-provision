@@ -1,4 +1,5 @@
 def log_info(message)
+  puts
   puts "\e[34m#{message}\e[0m"
 end
 

@@ -26,9 +26,9 @@ def download_to_path(url, path)
 
   raise printable_request(response) unless response.code == '200'
 
-  open(path, 'wb') { |file|
+  open(path, 'wb') do|file|
     file.write(response.body)
-  }
+  end
 
   content = File.read(path)
   raise 'empty file' if content.to_s.empty?

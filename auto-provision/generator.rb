@@ -5,14 +5,15 @@ def ensure_app(bundle_id)
   app = Spaceship::Portal.app.find(bundle_id)
   if app.nil?
     normalized_bundle_id = bundle_id.tr('.', ' ')
-    log_debug("\ngenerating app with bundle id (#{bundle_id})")
-    app = Spaceship::Portal.app.create!(bundle_id: bundle_id, name: "Bitrise - (#{normalized_bundle_id})")
+    name = "Bitrise - (#{normalized_bundle_id})"
+    log_done("registering app: #{name} with bundle id: (#{bundle_id})")
+
+    app = Spaceship::Portal.app.create!(bundle_id: bundle_id, name: name)
   else
-    log_debug("\napp with bundle id (#{bundle_id}) already exist")
+    log_done("app already registered: #{app.name} with bundle id: #{app.bundle_id}")
   end
 
   raise "failed to find or create app with bundle id: #{bundle_id}" unless app
-
   app
 end
 
@@ -30,12 +31,13 @@ def find_development_portal_certificate(local_certificate_path, local_certificat
   local_certificate = p12.certificate
 
   portal_development_certificates = Spaceship::Portal.certificate.development.all
-  log_debug('no development certificate belongs to the account') if portal_development_certificates.to_a.empty?
+  log_debug('no development code sign identity belongs to the account in this team') if portal_development_certificates.to_a.empty?
   portal_development_certificates.each do |cert|
     portal_certificate = cert.download
     return cert if certificate_matches(local_certificate, portal_certificate)
   end
 
+  log_debug('no development code sign identity matches to this certificate')
   nil
 end
 
@@ -44,22 +46,24 @@ def find_production_portal_certificate(local_certificate_path, local_certificate
 
   certificate_content = File.read(local_certificate_path)
   raise "Invalid certificate file #{local_certificate_path}: empty" if certificate_content.to_s.empty?
-  
+
   p12 = OpenSSL::PKCS12.new(certificate_content, local_certificate_passphrase)
   local_certificate = p12.certificate
 
   portal_production_certificates = Spaceship::Portal.certificate.production.all
-  log_debug('no production certificate belongs to the account') if portal_production_certificates.to_a.empty?
+  log_debug('no production code sign identity belongs to the account in this team') if portal_production_certificates.to_a.empty?
   portal_production_certificates.each do |cert|
     portal_certificate = cert.download
     return cert if certificate_matches(local_certificate, portal_certificate)
   end
 
+  log_debug('no production code sign identity matches to this certificate')
   nil
 end
 
 def ensure_test_devices(test_devices)
   updated_portal_devices = []
+
   portal_devices = Spaceship::Portal.device.all(mac: false, include_disabled: true) || []
   test_devices.each do |test_device|
     registered_test_device = nil
@@ -68,14 +72,15 @@ def ensure_test_devices(test_devices)
       next unless portal_device.udid == test_device.uuid
 
       registered_test_device = portal_device
-      log_debug("Test device (#{registered_test_device.name} - #{registered_test_device.udid}) already registered")
+      log_done("test device (#{registered_test_device.name} - #{registered_test_device.udid}) already registered")
       break
     end
 
     unless registered_test_device
       registered_test_device = Spaceship::Portal.device.create!(name: test_device.name, udid: test_device.uuid)
-      log_debug("Created test device (#{registered_test_device.name} - #{registered_test_device.udid})")
+      log_done("registering test device (#{registered_test_device.name} - #{registered_test_device.udid})")
     end
+
     raise 'failed to find or create device' unless registered_test_device
 
     updated_portal_devices.push(registered_test_device)
@@ -105,6 +110,7 @@ def ensure_profile_certificate(profile, certificate)
   end
 
   unless certificate_included
+    log_debug("#{certificate.name} not registered in profile: #{profile.name}")
     certificates.push(certificate)
     profile.certificates = certificates
   end
@@ -120,13 +126,17 @@ def ensure_profile_devices(profile, devices)
     device_included = false
 
     profile_devices.each do |profile_device|
-      if profile_device.udid == device.udid
-        device_included = true
-        break
-      end
+      next unless profile_device.udid == device.udid
+
+      device_included = true
+      log_debug("device #{device.name} (#{device.udid}) is included")
+      break
     end
 
-    updated_devices.push(device) unless device_included
+    unless device_included
+      log_debug(" adding device #{device.name} (#{device.udid}) to profile")
+      updated_devices.push(device)
+    end
   end
 
   profile.devices = updated_devices
@@ -140,24 +150,24 @@ def ensure_provisioning_profile(certificate, app, distributon_type, test_devices
   when 'development'
     profiles = find_profile_by_bundle_id(Spaceship::Portal.provisioning_profile.development.all, app.bundle_id)
     if profiles.to_a.empty?
-      log_warning("no development provisioning profile found for bundle id: #{app.bundle_id}, generating ...")
-
+      log_done("generating development provisioning profile found for bundle id: #{app.bundle_id}")
       profile = Spaceship::Portal.provisioning_profile.development.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise Development - (#{app.bundle_id})")
     else
       if profiles.count > 1
-        log_warning('multiple development provisionig profile found for bundle id, using first:')
-        profiles.each_with_index { |prof, index| puts "#{index}, #{prof}" }
-      else
-        log_debug("development profile for bundle id (#{app.bundle_id}) already exist")
+        log_warning("multiple development provisionig profiles found for bundle id: #{app.bundle_id}, using first:")
+        profiles.each_with_index { |prof, index| log_warning("#{index}. #{prof.name}") }
       end
 
       profile = profiles.first
+      log_done("found development profile: #{profile.name} (#{profile.udid}) for bundle id (#{app.bundle_id}) already exist")
 
       # ensure certificate is included
+      log_debug("ensure #{certificate.name} is included in profile")
       profile = ensure_profile_certificate(profile, certificate)
     end
 
     # register test devices
+    log_debug('ensure test devices are included in profile')
     profile = ensure_profile_devices(profile, test_devices)
 
     profile = profile.update!
@@ -170,20 +180,19 @@ def ensure_provisioning_profile(certificate, app, distributon_type, test_devices
     profiles = profiles_appstore_adhoc.find_all { |current| !current.is_adhoc? }
 
     if profiles.to_a.empty?
-      log_warning("no app store provisioning profile found for bundle id: #{app.bundle_id}, generating ...")
-
+      log_done("generating app store provisioning profile found for bundle id: #{app.bundle_id}")
       profile = Spaceship::Portal.provisioning_profile.app_store.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise App Store - (#{app.bundle_id})")
     else
       if profiles.count > 1
-        log_warning('multiple app store provisionig profile found, using first:')
-        profiles.each_with_index { |prof, index| puts "#{index}, #{prof}" }
-      else
-        log_debug("app store profile for bundle id (#{app.bundle_id}) already exist")
+        log_warning("multiple app store provisionig profiles found for bundle id: #{app.bundle_id}, using first:")
+        profiles.each_with_index { |prof, index| log_warning("#{index}. #{prof.name}") }
       end
 
       profile = profiles.first
+      log_done("found app store profile: #{profile.name} (#{profile.udid}) for bundle id (#{app.bundle_id}) already exist")
 
       # ensure certificate is included
+      log_debug("ensure #{certificate.name} is included in profile")
       profile = ensure_profile_certificate(profile, certificate)
 
       profile = profile.update!
@@ -197,53 +206,52 @@ def ensure_provisioning_profile(certificate, app, distributon_type, test_devices
     profiles = profiles_appstore_adhoc.find_all(&:is_adhoc?)
 
     if profiles.to_a.empty?
-      log_warning("no ad hoc provisioning profile found for bundle id: #{app.bundle_id}, generating ...")
-
+      log_done("generating ad hoc provisioning profile found for bundle id: #{app.bundle_id}")
       profile = Spaceship::Portal.provisioning_profile.ad_hoc.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise Ad Hoc - (#{app.bundle_id})")
     else
       if profiles.count > 1
-        log_warning('multiple ad hoc provisionig profile found, using first:')
-        profiles.each_with_index { |prof, index| puts "#{index}, #{prof}" }
-      else
-        log_debug("ad hoc profile for bundle id (#{app.bundle_id}) already exist")
+        log_warning("multiple ad hoc provisionig profiles found for bundle id: #{app.bundle_id}, using first:")
+        profiles.each_with_index { |prof, index| log_warning("#{index}. #{prof.name}") }
       end
 
       profile = profiles.first
+      log_done("found app store profile: #{profile.name} (#{profile.udid}) for bundle id (#{app.bundle_id}) already exist")
 
       # ensure certificate is included
+      log_debug("ensure #{certificate.name} is included in profile")
       profile = ensure_profile_certificate(profile, certificate)
     end
 
     # register test devices
+    log_debug('ensure test devices are included in profile')
     profile = ensure_profile_devices(profile, test_devices)
 
     profile = profile.update!
   when 'enterprise'
     profiles = find_profile_by_bundle_id(Spaceship::Portal.provisioning_profile.in_house.all, app.bundle_id)
     if profiles.to_a.empty?
-      log_warning("no enterprise provisioning profile found for bundle id: #{app.bundle_id}, generating ...")
-
+      log_done("generating enterprise provisioning profile found for bundle id: #{app.bundle_id}")
       profile = Spaceship::Portal.provisioning_profile.in_house.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise Enterprise - (#{app.bundle_id})")
     else
       if profiles.count > 1
-        log_warning('multiple enterprise provisionig profile found, using first:')
-        profiles.each_with_index { |prof, index| puts "#{index}, #{prof}" }
-      else
-        log_debug("enterprise profile for bundle id (#{app.bundle_id}) already exist")
+        log_warning("multiple enterprise provisionig profiles found for bundle id: #{app.bundle_id}, using first:")
+        profiles.each_with_index { |prof, index| log_warning("#{index}. #{prof.name}") }
       end
 
       profile = profiles.first
+      log_done("found app store profile: #{profile.name} (#{profile.udid}) for bundle id (#{app.bundle_id}) already exist")
 
       # ensure certificate is included
+      log_debug("ensure #{certificate.name} is included in profile")
       profile = ensure_profile_certificate(profile, certificate)
 
       profile = profile.update!
     end
   else
-    raise "invalid distribution type provided: #{distributon_type}, available: []"
+    raise "invalid distribution type provided: #{distributon_type}, available: [development, app-store, ad-hoc, enterprise]"
   end
 
-  raise 'failed to ensure provisioning profile' unless profile
+  raise "failed to find or create provisioning profile for bundle id: #{app.bundle_id}" unless profile
 
   profile
 end

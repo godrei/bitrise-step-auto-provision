@@ -43,8 +43,7 @@ def developer_portal_authentication(username, password, two_factor_session = nil
 
   if team_id.to_s.empty?
     teams = client.teams
-
-    raise 'your account belongs to multiple teams, please provide the team id to sign in' if teams.to_a.size > 1
+    raise 'Your developer portal account belongs to multiple teams, please provide the team id to sign in' if teams.to_a.size > 1
   else
     client.team_id = team_id
   end

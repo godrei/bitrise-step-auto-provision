@@ -41,15 +41,15 @@ class Params
 
   def print
     log_info('Params:')
-    log_details("build_url: #{@build_url}")
-    log_details("build_api_token: #{@build_api_token}")
     log_details("team_id: #{@team_id}")
-    log_details("certificate_urls: #{@certificate_urls}")
-    log_details("passphrases: #{@passphrases}")
+    log_details("certificate_urls: #{secure_value(@certificate_urls)}")
+    log_details("passphrases: #{secure_value(@passphrases)}")
     log_details("distributon_type: #{@distributon_type}")
     log_details("project_path: #{@project_path}")
-    log_details("keychain_password: #{@keychain_password}")
-    log_details("keychain_password: #{@keychain_password}")
+    log_details("build_url: #{@build_url}")
+    log_details("build_api_token: #{secure_value(@build_api_token)}")
+    log_details("keychain_path: #{@keychain_path}")
+    log_details("keychain_password: #{secure_value(@keychain_password)}")
     log_details("verbose_log: #{@verbose_log}")
   end
 
@@ -64,6 +64,11 @@ class Params
     raise 'missing: keychain_password' if @keychain_password.empty?
     raise 'missing: verbose_log' if @verbose_log.empty?
   end
+end
+
+def secure_value(value)
+  return '' if value.empty?
+  '***'
 end
 
 def split_pipe_separated_list(list)
@@ -85,7 +90,24 @@ begin
   DEBUG_LOG = (params.verbose_log == 'yes')
   ###
 
-  # Download certificates and with passphrases
+  # Developer Portal authentication
+  log_info('Developer portal authentication')
+
+  portal_data = get_developer_portal_data(params.build_url, params.build_api_token)
+  portal_data.validate
+
+  log_debug("session cookie: #{portal_data.session_cookies}\n")
+  session = convert_tfa_cookies(portal_data.session_cookies)
+  log_debug("converted session cookie: #{session}\n")
+
+  developer_portal_authentication(portal_data.apple_id, portal_data.password, session, params.team_id)
+
+  log_done('authenticated')
+  ###
+
+  # Download certificates
+  log_info('Downloading certificates')
+
   certificate_urls = split_pipe_separated_list(params.certificate_urls).reject(&:empty?)
   raise 'no certificates provider' if certificate_urls.to_a.empty?
 
@@ -94,26 +116,18 @@ begin
 
   certificate_passphrase_map = {}
   certificate_urls.each_with_index do |url, idx|
+    log_debug("downloading certificate ##{idx + 1}")
     path = download_to_tmp_file(url, "Certrificate#{idx}.p12")
+    log_debug("certificate path: #{path}")
     passphrase = passphrases[idx]
     certificate_passphrase_map[path] = passphrase
   end
-  log_debug("\ncertificate_passphrase_map: #{certificate_passphrase_map}")
-  ###
-
-  # Developer Portal authentication
-  portal_data = get_developer_portal_data(params.build_url, params.build_api_token)
-  portal_data.print if DEBUG_LOG
-  portal_data.validate
-
-  session = convert_tfa_cookies(portal_data.session_cookies)
-  log_debug("\nsession: #{session}")
-
-  developer_portal_authentication(portal_data.apple_id, portal_data.password, session, params.team_id)
-  log_done("\ndeveloper portal authenticated")
+  log_done("#{certificate_passphrase_map.length} certificates downloaded")
   ###
 
   # Find certificates on Developer Portal
+  log_info('Identify code signing identites on developer portal')
+
   path_development_certificate_map = {}
   path_development_certificate_passphrase_map = {}
 
@@ -121,13 +135,12 @@ begin
   path_production_certificate_passphrase_map = {}
 
   certificate_passphrase_map.each do |certificate_path, passphrase|
-    log_debug("searching for certificate (#{certificate_path}) with passphrase: (#{passphrase})")
+    log_debug("searching for code signing identites in certificate (#{certificate_path})")
 
     portal_certificate = find_development_portal_certificate(certificate_path, passphrase)
     if portal_certificate
-      log_done("\nportal development certificate found: #{portal_certificate.name}")
-      log_done("team: #{portal_certificate.owner_name} (#{portal_certificate.owner_id})")
-      raise 'multiple development certificate provided: step can handle only one development (and only one production) certificate' if path_development_certificate_map[certificate_path]
+      log_done("development certificate found: #{portal_certificate.name}")
+      raise 'multiple development certificates provided: step can handle only one development (and only one production) certificate' if path_development_certificate_map[certificate_path]
 
       path_development_certificate_map[certificate_path] = portal_certificate
       path_development_certificate_passphrase_map[certificate_path] = passphrase
@@ -136,9 +149,8 @@ begin
     portal_certificate = find_production_portal_certificate(certificate_path, passphrase)
     next unless portal_certificate
 
-    log_done("\nportal prodcution certificate found: #{portal_certificate.name}")
-    log_done("team: #{portal_certificate.owner_name} (#{portal_certificate.owner_id})")
-    raise 'multiple production certificate provided: step can handle only one production (and only one development) certificate' if path_production_certificate_map[certificate_path]
+    log_done("production certificate found: #{portal_certificate.name}")
+    raise 'multiple production certificates provided: step can handle only one production (and only one development) certificate' if path_production_certificate_map[certificate_path]
 
     path_production_certificate_map[certificate_path] = portal_certificate
     path_production_certificate_passphrase_map[certificate_path] = passphrase
@@ -147,16 +159,37 @@ begin
   ###
 
   # Ensure test devices
+  log_info('Ensure test devices on Developer Portal')
   test_devices = ensure_test_devices(portal_data.test_devices)
   ###
 
-  # Ensure Profiles
-  project_helper = ProjectHelper.new(params.project_path)
-  project_target_bundle_id = project_helper.project_target_bundle_id_map
-  project_target_entitlements = project_helper.project_target_entitlements_map
+  # Anlyzing project
+  log_info('Anlyzing project')
 
-  log_debug("\nproject_target_bundle_id: #{JSON.pretty_generate(project_target_bundle_id)}")
-  log_debug("\nproject_target_entitlements: #{JSON.pretty_generate(project_target_entitlements)}")
+  project_helper = ProjectHelper.new(params.project_path)
+
+  project_target_bundle_id = project_helper.project_target_bundle_id_map
+  raise 'no targets found' if project_target_bundle_id.to_a.empty?
+
+  project_target_entitlements = project_helper.project_target_entitlements_map
+  raise 'no targets found' if project_target_entitlements.to_a.empty?
+  raise 'analyzer failed' unless project_target_bundle_id.to_a.length == project_target_entitlements.to_a.length
+
+  project_target_bundle_id.each do |project_path, target_bundle_id|
+    log_done("project: #{project_path}")
+
+    idx = 0
+    target_bundle_id.each do |target, bundle_id|
+      idx += 1
+      entitlements_count = (project_target_entitlements[project_path][target] || []).length
+
+      log_details("#{idx}. target: #{target} (#{bundle_id}) with #{entitlements_count} services")
+    end
+  end
+  ###
+
+  # Anlyzing project
+  log_info('Ensure App IDs and Provisioning Profiles on Developer Portal')
 
   target_development_profile_map = {}
   target_development_profile_path_map = {}
@@ -166,25 +199,27 @@ begin
 
   project_target_bundle_id.each do |path, target_bundle_id|
     target_entitlements = project_target_entitlements[path]
-
-    puts
-    log_info("analyzing project: #{path}")
-
+    log_details("checking project: #{path}")
     target_bundle_id.each do |target, bundle_id|
       entitlements = target_entitlements[target]
+      log_done("checking target: #{target} (#{bundle_id}) with #{entitlements.length} services")
 
-      log_details("analyzing target with bundle id: #{bundle_id}")
-
+      log_info("Ensure App ID (#{bundle_id}) on Developer Portal")
       app = ensure_app(bundle_id)
+
+      log_info("Sync App ID (#{bundle_id}) Services")
       app = sync_app_services(app, entitlements)
 
       development_portal_certificate = path_development_certificate_map.values[0] unless path_development_certificate_map.empty?
       if development_portal_certificate
+        log_info('Ensure Development Provisioning Profile on Developer Portal')
+
         profile = ensure_provisioning_profile(development_portal_certificate, app, 'development', test_devices)
         target_development_profile_map[target] = profile
 
-        log_details("using development profile: #{profile.name}")
+        log_done("downloading development profile: #{profile.name}")
         profile_path = download_profile(profile)
+        log_debug("profile path: #{profile_path}")
         target_development_profile_path_map[target] = profile_path
       end
 
@@ -193,19 +228,26 @@ begin
       production_portal_certificate = path_production_certificate_map.values[0] unless path_production_certificate_map.empty?
       next unless production_portal_certificate
 
+      log_info('Ensure Production Provisioning Profile on Developer Portal')
+
       profile = ensure_provisioning_profile(production_portal_certificate, app, params.distributon_type, test_devices)
       target_production_profile_map[target] = profile
 
-      log_details("using #{params.distributon_type} profile: #{profile.name}")
+      log_details("downloading #{params.distributon_type} profile: #{profile.name}")
       profile_path = download_profile(profile)
+      log_debug("profile path: #{profile_path}")
       target_production_profile_path_map[target] = profile_path
     end
   end
   ###
 
-  # Force code sign setting in project
+  # Apply code sign setting in project
+  log_info('Apply code sign setting in project')
+
   project_target_bundle_id.each do |path, target_bundle_id|
+    log_details("checking project: #{path}")
     target_bundle_id.each_key do |target|
+      log_done("checking target: #{target} (#{bundle_id})")
       certificate = nil
       profile = nil
 
@@ -225,16 +267,31 @@ begin
         end
       end
 
+
+      log_done('CODE_SIGN_STYLE: Manual')
+      log_done('ProvisioningStyle: Manual')
+
       team_id = certificate.owner_id
+      log_done("DEVELOPMENT_TEAM: #{team_id}")
+
       code_sign_identity = certificate.name
+      log_done("CODE_SIGN_IDENTITY: #{code_sign_identity}")
+
       provisioning_profile_uuid = profile.uuid
+      log_done("PROVISIONING_PROFILE: #{provisioning_profile_uuid}")
 
       project_helper.force_code_sign_properties(path, target, team_id, code_sign_identity, provisioning_profile_uuid)
+
+      build_settings = project_helper.xcodebuild_target_build_settings(path, target)
+      log_debug('build settings:')
+      build_settings.each { |key, value| log_debug("#{key}: #{value}") }
     end
   end
   ###
 
   # Install certificates
+  log_info('Install certificates')
+
   keychain_helper = KeychainHelper.new(params.keychain_path, params.keychain_password)
 
   certificate_passphrase_map.each do |path, passphrase|
@@ -246,9 +303,12 @@ begin
   keychain_helper.add_to_keychain_search_path
   keychain_helper.set_default_keychain
   keychain_helper.unlock_keychain
+
+  log_done("#{certificate_passphrase_map.length} certificates installed")
   ###
 rescue => ex
   puts
-  log_error(ex.to_s + "\n" + ex.backtrace.join("\n"))
+  log_error(ex.to_s)
+  log_error(ex.backtrace.join("\n").to_s) if DEBUG_LOG
   exit 1
 end

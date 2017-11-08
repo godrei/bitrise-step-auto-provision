@@ -10,12 +10,6 @@ class PortalData
       @name = json['title'] || ''
     end
 
-    def print
-      log_info('TestDevice:')
-      log_details("uuid: #{@uuid}")
-      log_details("name: #{@name}")
-    end
-
     def validate
       raise 'device uuid not porvided this build' if @uuid.empty?
       raise 'device title not provided for this build' if @name.empty?
@@ -39,17 +33,6 @@ class PortalData
     end
   end
 
-  def print
-    log_info('PortalData:')
-    log_details("apple_id: #{@apple_id}")
-    log_details("password: #{@password}")
-    log_details("session_cookies: #{@session_cookies}")
-    log_details('test_devices:')
-    @test_devices.each do |device|
-      log_details("- #{device.name} (#{device.uuid})")
-    end
-  end
-
   def validate
     raise 'developer portal apple id not provided for this build' if @apple_id.empty?
     raise 'developer portal password not provided for this build' if @password.empty?
@@ -58,6 +41,7 @@ end
 
 def get_developer_portal_data(build_url, build_api_token)
   url = "#{build_url}/apple_developer_portal_data.json"
+  log_debug("developer portal data url: #{url}")
   uri = URI.parse(url)
 
   request = Net::HTTP::Get.new(uri)
@@ -71,7 +55,9 @@ def get_developer_portal_data(build_url, build_api_token)
   end
 
   developer_portal_data = JSON.parse(response.body) if response.body
-  raise developer_portal_data['error_msg'] || printable_request(response) unless response.code == '200'
+  error_message = developer_portal_data['error_msg'] if developer_portal_data
+  error_message ||= printable_request(response)
+  raise error_message unless response.code == '200'
 
   PortalData.new(developer_portal_data)
 end
