@@ -36,7 +36,7 @@ def download_to_tmp_file(url)
     path = url.sub('file://', '')
     raise "Certificate not exist at: #{path}" unless File.exist?(path)
   else
-    path = create_tmp_file("Certificate#{idx}.p12")
+    path = create_tmp_file('Certificate.p12')
     download_to_path(url, path)
   end
   path
