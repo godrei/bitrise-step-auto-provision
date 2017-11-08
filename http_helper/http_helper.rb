@@ -18,7 +18,8 @@ end
 def download_to_path(url, path)
   uri = URI.parse(url)
   request = Net::HTTP::Get.new(uri.request_uri)
-  http_object = Net::HTTP.new(uri.host, uri.port, use_ssl: uri.scheme == 'https')
+  http_object = Net::HTTP.new(uri.host, uri.port)
+  http_object.use_ssl = (uri.scheme == 'https')
   response = http_object.start do |http|
     http.request(request)
   end

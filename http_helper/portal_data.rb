@@ -44,7 +44,7 @@ class PortalData
     log_details("apple_id: #{@apple_id}")
     log_details("password: #{@password}")
     log_details("session_cookies: #{@session_cookies}")
-    log_details("test_devices:")
+    log_details('test_devices:')
     @test_devices.each do |device|
       log_details("- #{device.name} (#{device.uuid})")
     end
@@ -64,7 +64,7 @@ def get_developer_portal_data(build_url, build_api_token)
   request['BUILD_API_TOKEN'] = build_api_token
 
   http_object = Net::HTTP.new(uri.host, uri.port)
-  http_object.use_ssl = true if uri.scheme == 'https'
+  http_object.use_ssl = (uri.scheme == 'https')
 
   response = http_object.start do |http|
     http.request(request)
