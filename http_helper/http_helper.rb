@@ -8,8 +8,8 @@ def create_tmp_file(filename)
   File.join(Dir.tmpdir, filename)
 end
 
-def printable_request(response)
-  str = "request\n"
+def printable_response(response)
+  str = "response\n"
   str += "status: #{response.code}\n"
   str += "body: #{response.body}\n"
   str
@@ -24,7 +24,7 @@ def download_to_path(url, path)
     http.request(request)
   end
 
-  raise printable_request(response) unless response.code == '200'
+  raise printable_response(response) unless response.code == '200'
 
   open(path, 'wb') do|file|
     file.write(response.body)

@@ -54,9 +54,11 @@ def get_developer_portal_data(build_url, build_api_token)
     http.request(request)
   end
 
+  log_debug(printable_response(response))
+
   developer_portal_data = JSON.parse(response.body) if response.body
   error_message = developer_portal_data['error_msg'] if developer_portal_data
-  error_message ||= printable_request(response)
+  error_message ||= printable_response(response)
   raise error_message unless response.code == '200'
 
   PortalData.new(developer_portal_data)

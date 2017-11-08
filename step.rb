@@ -91,7 +91,7 @@ begin
   ###
 
   # Developer Portal authentication
-  log_info('Developer portal authentication')
+  log_info('Developer Portal authentication')
 
   portal_data = get_developer_portal_data(params.build_url, params.build_api_token)
   portal_data.validate
@@ -106,7 +106,7 @@ begin
   ###
 
   # Download certificates
-  log_info('Downloading certificates')
+  log_info('Downloading Certificates')
 
   certificate_urls = split_pipe_separated_list(params.certificate_urls).reject(&:empty?)
   raise 'no certificates provider' if certificate_urls.to_a.empty?
@@ -126,7 +126,7 @@ begin
   ###
 
   # Find certificates on Developer Portal
-  log_info('Identify code signing identites on developer portal')
+  log_info('Identify Certificates on developer Portal')
 
   path_development_certificate_map = {}
   path_development_certificate_passphrase_map = {}
@@ -135,11 +135,11 @@ begin
   path_production_certificate_passphrase_map = {}
 
   certificate_passphrase_map.each do |certificate_path, passphrase|
-    log_debug("searching for code signing identites in certificate (#{certificate_path})")
+    log_debug("searching for Certificates (#{certificate_path})")
 
     portal_certificate = find_development_portal_certificate(certificate_path, passphrase)
     if portal_certificate
-      log_done("development certificate found: #{portal_certificate.name}")
+      log_done("development Certificates found: #{portal_certificate.name}")
       raise 'multiple development certificates provided: step can handle only one development (and only one production) certificate' if path_development_certificate_map[certificate_path]
 
       path_development_certificate_map[certificate_path] = portal_certificate
@@ -149,7 +149,7 @@ begin
     portal_certificate = find_production_portal_certificate(certificate_path, passphrase)
     next unless portal_certificate
 
-    log_done("production certificate found: #{portal_certificate.name}")
+    log_done("production Certificates found: #{portal_certificate.name}")
     raise 'multiple production certificates provided: step can handle only one production (and only one development) certificate' if path_production_certificate_map[certificate_path]
 
     path_production_certificate_map[certificate_path] = portal_certificate
@@ -183,7 +183,7 @@ begin
       idx += 1
       entitlements_count = (project_target_entitlements[project_path][target] || []).length
 
-      log_details("#{idx}. target: #{target} (#{bundle_id}) with #{entitlements_count} services")
+      log_details("target ##{idx}: #{target} (#{bundle_id}) with #{entitlements_count} services")
     end
   end
   ###
@@ -204,15 +204,15 @@ begin
       entitlements = target_entitlements[target]
       log_done("checking target: #{target} (#{bundle_id}) with #{entitlements.length} services")
 
-      log_info("Ensure App ID (#{bundle_id}) on Developer Portal")
+      log_details("Ensure App ID (#{bundle_id}) on Developer Portal")
       app = ensure_app(bundle_id)
 
-      log_info("Sync App ID (#{bundle_id}) Services")
+      log_details("Sync App ID (#{bundle_id}) Services")
       app = sync_app_services(app, entitlements)
 
       development_portal_certificate = path_development_certificate_map.values[0] unless path_development_certificate_map.empty?
       if development_portal_certificate
-        log_info('Ensure Development Provisioning Profile on Developer Portal')
+        log_details('Ensure Development Provisioning Profile on Developer Portal')
 
         profile = ensure_provisioning_profile(development_portal_certificate, app, 'development', test_devices)
         target_development_profile_map[target] = profile
@@ -228,12 +228,12 @@ begin
       production_portal_certificate = path_production_certificate_map.values[0] unless path_production_certificate_map.empty?
       next unless production_portal_certificate
 
-      log_info('Ensure Production Provisioning Profile on Developer Portal')
+      log_details('Ensure Production Provisioning Profile on Developer Portal')
 
       profile = ensure_provisioning_profile(production_portal_certificate, app, params.distributon_type, test_devices)
       target_production_profile_map[target] = profile
 
-      log_details("downloading #{params.distributon_type} profile: #{profile.name}")
+      log_done("downloading #{params.distributon_type} profile: #{profile.name}")
       profile_path = download_profile(profile)
       log_debug("profile path: #{profile_path}")
       target_production_profile_path_map[target] = profile_path
@@ -268,17 +268,17 @@ begin
       end
 
 
-      log_done('CODE_SIGN_STYLE: Manual')
-      log_done('ProvisioningStyle: Manual')
+      log_details('CODE_SIGN_STYLE: Manual')
+      log_details('ProvisioningStyle: Manual')
 
       team_id = certificate.owner_id
-      log_done("DEVELOPMENT_TEAM: #{team_id}")
+      log_details("DEVELOPMENT_TEAM: #{team_id}")
 
       code_sign_identity = certificate.name
-      log_done("CODE_SIGN_IDENTITY: #{code_sign_identity}")
+      log_details("CODE_SIGN_IDENTITY: #{code_sign_identity}")
 
       provisioning_profile_uuid = profile.uuid
-      log_done("PROVISIONING_PROFILE: #{provisioning_profile_uuid}")
+      log_details("PROVISIONING_PROFILE: #{provisioning_profile_uuid}")
 
       project_helper.force_code_sign_properties(path, target, team_id, code_sign_identity, provisioning_profile_uuid)
 

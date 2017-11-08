@@ -31,13 +31,13 @@ def find_development_portal_certificate(local_certificate_path, local_certificat
   local_certificate = p12.certificate
 
   portal_development_certificates = Spaceship::Portal.certificate.development.all
-  log_debug('no development code sign identity belongs to the account in this team') if portal_development_certificates.to_a.empty?
+  log_debug('no development Certificates belongs to the account in this team') if portal_development_certificates.to_a.empty?
   portal_development_certificates.each do |cert|
     portal_certificate = cert.download
     return cert if certificate_matches(local_certificate, portal_certificate)
   end
 
-  log_debug('no development code sign identity matches to this certificate')
+  log_debug('no development Certificates matches')
   nil
 end
 
@@ -51,13 +51,13 @@ def find_production_portal_certificate(local_certificate_path, local_certificate
   local_certificate = p12.certificate
 
   portal_production_certificates = Spaceship::Portal.certificate.production.all
-  log_debug('no production code sign identity belongs to the account in this team') if portal_production_certificates.to_a.empty?
+  log_debug('no production Certificates belongs to the account in this team') if portal_production_certificates.to_a.empty?
   portal_production_certificates.each do |cert|
     portal_certificate = cert.download
     return cert if certificate_matches(local_certificate, portal_certificate)
   end
 
-  log_debug('no production code sign identity matches to this certificate')
+  log_debug('no production Certificates matches')
   nil
 end
 
@@ -72,13 +72,13 @@ def ensure_test_devices(test_devices)
       next unless portal_device.udid == test_device.uuid
 
       registered_test_device = portal_device
-      log_done("test device (#{registered_test_device.name} - #{registered_test_device.udid}) already registered")
+      log_done("test device #{registered_test_device.name} (#{registered_test_device.udid}) already registered")
       break
     end
 
     unless registered_test_device
       registered_test_device = Spaceship::Portal.device.create!(name: test_device.name, udid: test_device.uuid)
-      log_done("registering test device (#{registered_test_device.name} - #{registered_test_device.udid})")
+      log_done("registering test device #{registered_test_device.name} (#{registered_test_device.udid})")
     end
 
     raise 'failed to find or create device' unless registered_test_device
@@ -159,7 +159,7 @@ def ensure_provisioning_profile(certificate, app, distributon_type, test_devices
       end
 
       profile = profiles.first
-      log_done("found development profile: #{profile.name} (#{profile.udid}) for bundle id (#{app.bundle_id}) already exist")
+      log_done("found development profile: #{profile.name} (#{profile.uuid}) for bundle id (#{app.bundle_id}) already exist")
 
       # ensure certificate is included
       log_debug("ensure #{certificate.name} is included in profile")
@@ -189,7 +189,7 @@ def ensure_provisioning_profile(certificate, app, distributon_type, test_devices
       end
 
       profile = profiles.first
-      log_done("found app store profile: #{profile.name} (#{profile.udid}) for bundle id (#{app.bundle_id}) already exist")
+      log_done("found app store profile: #{profile.name} (#{profile.uuid}) for bundle id (#{app.bundle_id}) already exist")
 
       # ensure certificate is included
       log_debug("ensure #{certificate.name} is included in profile")
@@ -215,7 +215,7 @@ def ensure_provisioning_profile(certificate, app, distributon_type, test_devices
       end
 
       profile = profiles.first
-      log_done("found app store profile: #{profile.name} (#{profile.udid}) for bundle id (#{app.bundle_id}) already exist")
+      log_done("found app store profile: #{profile.name} (#{profile.uuid}) for bundle id (#{app.bundle_id}) already exist")
 
       # ensure certificate is included
       log_debug("ensure #{certificate.name} is included in profile")
@@ -239,7 +239,7 @@ def ensure_provisioning_profile(certificate, app, distributon_type, test_devices
       end
 
       profile = profiles.first
-      log_done("found app store profile: #{profile.name} (#{profile.udid}) for bundle id (#{app.bundle_id}) already exist")
+      log_done("found app store profile: #{profile.name} (#{profile.uuid}) for bundle id (#{app.bundle_id}) already exist")
 
       # ensure certificate is included
       log_debug("ensure #{certificate.name} is included in profile")
