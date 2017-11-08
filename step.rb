@@ -135,11 +135,11 @@ begin
   path_production_certificate_passphrase_map = {}
 
   certificate_passphrase_map.each do |certificate_path, passphrase|
-    log_debug("searching for Certificates (#{certificate_path})")
+    log_debug("searching for Certificate (#{certificate_path})")
 
     portal_certificate = find_development_portal_certificate(certificate_path, passphrase)
     if portal_certificate
-      log_done("development Certificates found: #{portal_certificate.name}")
+      log_done("development Certificate found: #{portal_certificate.name}")
       raise 'multiple development certificates provided: step can handle only one development (and only one production) certificate' if path_development_certificate_map[certificate_path]
 
       path_development_certificate_map[certificate_path] = portal_certificate
@@ -149,7 +149,7 @@ begin
     portal_certificate = find_production_portal_certificate(certificate_path, passphrase)
     next unless portal_certificate
 
-    log_done("production Certificates found: #{portal_certificate.name}")
+    log_done("production Certificate found: #{portal_certificate.name}")
     raise 'multiple production certificates provided: step can handle only one production (and only one development) certificate' if path_production_certificate_map[certificate_path]
 
     path_production_certificate_map[certificate_path] = portal_certificate
@@ -202,17 +202,18 @@ begin
     log_details("checking project: #{path}")
     target_bundle_id.each do |target, bundle_id|
       entitlements = target_entitlements[target]
+      puts
       log_done("checking target: #{target} (#{bundle_id}) with #{entitlements.length} services")
 
-      log_details("Ensure App ID (#{bundle_id}) on Developer Portal")
+      log_details("ensure App ID (#{bundle_id}) on Developer Portal")
       app = ensure_app(bundle_id)
 
-      log_details("Sync App ID (#{bundle_id}) Services")
+      log_details("sync App ID (#{bundle_id}) Services")
       app = sync_app_services(app, entitlements)
 
       development_portal_certificate = path_development_certificate_map.values[0] unless path_development_certificate_map.empty?
       if development_portal_certificate
-        log_details('Ensure Development Provisioning Profile on Developer Portal')
+        log_details('ensure Development Provisioning Profile on Developer Portal')
 
         profile = ensure_provisioning_profile(development_portal_certificate, app, 'development', test_devices)
         target_development_profile_map[target] = profile
@@ -228,7 +229,7 @@ begin
       production_portal_certificate = path_production_certificate_map.values[0] unless path_production_certificate_map.empty?
       next unless production_portal_certificate
 
-      log_details('Ensure Production Provisioning Profile on Developer Portal')
+      log_details('ensure Production Provisioning Profile on Developer Portal')
 
       profile = ensure_provisioning_profile(production_portal_certificate, app, params.distributon_type, test_devices)
       target_production_profile_map[target] = profile
@@ -246,7 +247,8 @@ begin
 
   project_target_bundle_id.each do |path, target_bundle_id|
     log_details("checking project: #{path}")
-    target_bundle_id.each_key do |target|
+    target_bundle_id.each do |target, bundle_id|
+      puts
       log_done("checking target: #{target} (#{bundle_id})")
       certificate = nil
       profile = nil
