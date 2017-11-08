@@ -30,6 +30,8 @@ def find_development_portal_certificate(local_certificate_path, local_certificat
   p12 = OpenSSL::PKCS12.new(certificate_content, local_certificate_passphrase)
   local_certificate = p12.certificate
 
+  puts(JSON.pretty_generate(p12))
+
   portal_development_certificates = Spaceship::Portal.certificate.development.all
   log_debug('no development Certificates belongs to the account in this team') if portal_development_certificates.to_a.empty?
   portal_development_certificates.each do |cert|
