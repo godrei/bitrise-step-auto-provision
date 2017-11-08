@@ -251,6 +251,7 @@ begin
     target_bundle_id.each do |target, bundle_id|
       puts
       log_done("checking target: #{target} (#{bundle_id})")
+      portal_certificate = nil
       certificate_path = nil
       passphrase = nil
       profile = nil
@@ -260,12 +261,14 @@ begin
         profile = target_development_profile_map.values[0] unless target_development_profile_map.empty?
         certificate_path = portal_certificate_path
         passphrase = path_development_certificate_passphrase_map[certificate_path]
+        portal_certificate = path_development_certificate_map[certificate_path]
       else
         portal_certificate_path = path_production_certificate_map.keys[0] unless path_production_certificate_map.empty?
         if portal_certificate
           profile = target_production_profile_map.values[0] unless target_production_profile_map.empty?
           certificate_path = portal_certificate_path
           passphrase = path_production_certificate_passphrase_map[certificate_path]
+          portal_certificate = path_production_certificate_map[certificate_path]
         end
       end
 
@@ -277,7 +280,7 @@ begin
       log_details('CODE_SIGN_STYLE: Manual')
       log_details('ProvisioningStyle: Manual')
 
-      team_id = certificate.owner_id
+      team_id = portal_certificate.owner_id
       log_details("DEVELOPMENT_TEAM: #{team_id}")
 
       code_sign_identity = common_name
