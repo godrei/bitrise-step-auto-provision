@@ -272,7 +272,7 @@ begin
       certificate_content = File.read(certificate_path)
       p12 = OpenSSL::PKCS12.new(certificate_content, passphrase)
       certificate = p12.certificate
-      common_name = cert.subject.to_a.find { |name, _, _| name == 'CN' }[1]
+      common_name = certificate.subject.to_a.find { |name, _, _| name == 'CN' }[1]
 
       log_details('CODE_SIGN_STYLE: Manual')
       log_details('ProvisioningStyle: Manual')
