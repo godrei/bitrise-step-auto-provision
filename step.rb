@@ -11,8 +11,7 @@ require_relative 'http_helper/portal_data'
 require_relative 'auto-provision/authenticator'
 require_relative 'auto-provision/generator'
 require_relative 'auto-provision/app_services'
-
-DEBUG_LOG = true
+require_relative 'keychain/keychain'
 
 # Params
 class Params
@@ -23,6 +22,9 @@ class Params
   attr_accessor :passphrases
   attr_accessor :distributon_type
   attr_accessor :project_path
+  attr_accessor :keychain_path
+  attr_accessor :keychain_password
+  attr_accessor :verbose_log
 
   def initialize
     @build_url = ENV['build_url'] || ''
@@ -32,6 +34,9 @@ class Params
     @passphrases = ENV['passphrases'] || ''
     @distributon_type = ENV['distributon_type'] || ''
     @project_path = ENV['project_path'] || ''
+    @keychain_path = ENV['keychain_path'] || ''
+    @keychain_password = ENV['keychain_password'] || ''
+    @verbose_log = ENV['verbose_log'] || ''
   end
 
   def print
@@ -43,6 +48,9 @@ class Params
     log_details("passphrases: #{@passphrases}")
     log_details("distributon_type: #{@distributon_type}")
     log_details("project_path: #{@project_path}")
+    log_details("keychain_password: #{@keychain_password}")
+    log_details("keychain_password: #{@keychain_password}")
+    log_details("verbose_log: #{@verbose_log}")
   end
 
   def validate
@@ -52,6 +60,9 @@ class Params
     raise 'missing: certificate_urls' if @certificate_urls.empty?
     raise 'missing: distributon_type' if @distributon_type.empty?
     raise 'missing: project_path' if @project_path.empty?
+    raise 'missing: keychain_path' if @keychain_path.empty?
+    raise 'missing: keychain_password' if @keychain_password.empty?
+    raise 'missing: verbose_log' if @verbose_log.empty?
   end
 end
 
@@ -70,6 +81,8 @@ begin
   params = Params.new
   params.print
   params.validate
+
+  DEBUG_LOG = (params.verbose_log == 'yes')
   ###
 
   # Download certificates and with passphrases
@@ -221,15 +234,18 @@ begin
   end
   ###
 
-  # Export output
-  certificate_paths = path_development_certificate_map.keys.concat(path_production_certificate_map.keys).reject(&:empty?).join('|')
-  raise 'failed to export BITRISE_CERTIFICATE_URL' unless system("envman add --key BITRISE_CERTIFICATE_URL --value \"#{certificate_paths}\"")
+  # Install certificates
+  keychain_helper = KeychainHelper.new(params.keychain_path, params.keychain_password)
 
-  certificate_passphrases = path_development_certificate_passphrase_map.values.concat(path_production_certificate_passphrase_map.values).reject(&:empty?).join('|')
-  raise 'failed to export BITRISE_CERTIFICATE_PASSPHRASE' unless system("envman add --key BITRISE_CERTIFICATE_PASSPHRASE --value \"#{certificate_passphrases}\"")
+  certificate_passphrase_map.each do |path, passphrase|
+    keychain_helper.import_certificate(path, passphrase)
+  end
 
-  profile_paths = target_development_profile_path_map.values.concat(target_production_profile_path_map.values).reject(&:empty?).join('|')
-  raise 'failed to export BITRISE_PROVISION_URL' unless system("envman add --key BITRISE_PROVISION_URL --value \"#{profile_paths}\"")
+  keychain_helper.set_key_partition_list_if_needed
+  keychain_helper.set_keychain_settings_default_lock
+  keychain_helper.add_to_keychain_search_path
+  keychain_helper.set_default_keychain
+  keychain_helper.unlock_keychain
   ###
 rescue => ex
   puts

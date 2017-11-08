@@ -94,14 +94,23 @@ inputs:
     description: |-
       A `.xcodeproj` or `.xcworkspace` path.
     is_required: true
-outputs:
-  - BITRISE_CERTIFICATE_URL:
-    opts:
-      title: "List of downloaded Certificate paths"
-  - BITRISE_CERTIFICATE_PASSPHRASE:
-    opts:
-      title: "List of Certificate Passhrases"
-  - BITRISE_PROVISION_URL:
-    opts:
-      title: "List of Provisioning Profiles"
-    
+- keychain_path: $HOME/Library/Keychains/login.keychain
+  opts:
+    category: Config
+    title: Keychain Path
+    is_required: true
+- keychain_password: $BITRISE_KEYCHAIN_PASSWORD
+  opts:
+    category: Config
+    title: Keychain's password
+    is_required: true
+- verbose_log: "no"
+  opts:
+    title: "Enable verbose logging?"
+    summary: ""
+    description: |-
+      Enable verbose logging?
+    is_required: true
+    value_options:
+    - "yes"
+    - "no"

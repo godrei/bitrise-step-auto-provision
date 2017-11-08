@@ -25,7 +25,6 @@ def download_to_path(url, path)
   end
 
   raise printable_request(response) unless response.code == '200'
-  puts printable_request(response)
 
   open(path, 'wb') { |file|
     file.write(response.body)
