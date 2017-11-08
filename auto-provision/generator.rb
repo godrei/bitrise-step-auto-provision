@@ -23,7 +23,12 @@ end
 def find_development_portal_certificate(local_certificate_path, local_certificate_passphrase)
   raise "Certificate file #{local_certificate_path} does not exist" unless File.file?(local_certificate_path)
 
-  p12 = OpenSSL::PKCS12.new(File.read(local_certificate_path), local_certificate_passphrase)
+  certificate_content = File.read(local_certificate_path)
+  raise "Invalid certificate file #{local_certificate_path}: empty" if certificate_content.to_s.empty?
+
+  log_debug("certificate_content:\n#{certificate_content}")
+
+  p12 = OpenSSL::PKCS12.new(certificate_content, local_certificate_passphrase)
   local_certificate = p12.certificate
 
   portal_development_certificates = Spaceship::Portal.certificate.development.all
@@ -39,7 +44,12 @@ end
 def find_production_portal_certificate(local_certificate_path, local_certificate_passphrase)
   raise "Certificate file #{local_certificate_path} does not exist" unless File.file?(local_certificate_path)
 
-  p12 = OpenSSL::PKCS12.new(File.read(local_certificate_path), local_certificate_passphrase)
+  certificate_content = File.read(local_certificate_path)
+  raise "Invalid certificate file #{local_certificate_path}: empty" if certificate_content.to_s.empty?
+  
+  log_debug("certificate_content:\n#{certificate_content}")
+
+  p12 = OpenSSL::PKCS12.new(certificate_content, local_certificate_passphrase)
   local_certificate = p12.certificate
 
   portal_production_certificates = Spaceship::Portal.certificate.production.all

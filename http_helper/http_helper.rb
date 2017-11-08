@@ -9,9 +9,9 @@ def create_tmp_file(filename)
 end
 
 def printable_request(response)
-  str = 'request'
-  str += "status: #{response.code}"
-  str += "body: #{response.body}"
+  str = "request\n"
+  str += "status: #{response.code}\n"
+  str += "body: #{response.body}\n"
   str
 end
 
@@ -25,22 +25,28 @@ def download_to_path(url, path)
   end
 
   raise printable_request(response) unless response.code == '200'
+  puts printable_request(response)
 
-  io = open(path, 'w')
-  chunk = response.read_body
-  io.write(chunk)
+  open(path, 'wb') { |file|
+    file.write(response.body)
+  }
+
+  content = File.read(path)
+  raise 'empty file' if content.to_s.empty?
+
+  path
 end
 
 def download_to_tmp_file(url, filename)
-  path = nil
+  pth = nil
   if url.start_with?('file://')
-    path = url.sub('file://', '')
-    raise "Certificate not exist at: #{path}" unless File.exist?(path)
+    pth = url.sub('file://', '')
+    raise "Certificate not exist at: #{pth}" unless File.exist?(pth)
   else
-    path = create_tmp_file(filename)
-    download_to_path(url, path)
+    pth = create_tmp_file(filename)
+    download_to_path(url, pth)
   end
-  path
+  pth
 end
 
 def download_profile(profile)
