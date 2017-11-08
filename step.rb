@@ -108,6 +108,8 @@ begin
   path_production_certificate_passphrase_map = {}
 
   certificate_passphrase_map.each do |certificate_path, passphrase|
+    log_debug("searching for certificate: #{certificate_path} with passphrase: #{passphrase}")
+    
     portal_certificate = find_development_portal_certificate(certificate_path, passphrase)
     if portal_certificate
       log_done("\nportal development certificate found: #{portal_certificate.name}")
