@@ -21,6 +21,8 @@ def certificate_matches(certificate1, certificate2)
 end
 
 def find_development_portal_certificate(local_certificate_path, local_certificate_passphrase)
+  raise "Certificate file #{local_certificate_path} does not exist" unless File.file?(local_certificate_path)
+
   p12 = OpenSSL::PKCS12.new(File.read(local_certificate_path), local_certificate_passphrase)
   local_certificate = p12.certificate
 
@@ -35,6 +37,8 @@ def find_development_portal_certificate(local_certificate_path, local_certificat
 end
 
 def find_production_portal_certificate(local_certificate_path, local_certificate_passphrase)
+  raise "Certificate file #{local_certificate_path} does not exist" unless File.file?(local_certificate_path)
+
   p12 = OpenSSL::PKCS12.new(File.read(local_certificate_path), local_certificate_passphrase)
   local_certificate = p12.certificate
 
