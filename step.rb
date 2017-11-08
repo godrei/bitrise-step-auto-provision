@@ -251,25 +251,28 @@ begin
     target_bundle_id.each do |target, bundle_id|
       puts
       log_done("checking target: #{target} (#{bundle_id})")
-      certificate = nil
+      certificate_path = nil
+      passphrase = nil
       profile = nil
 
-      portal_certificate = path_development_certificate_map.values[0] unless path_development_certificate_map.empty?
-      if portal_certificate
-        portal_profile = target_development_profile_map.values[0] unless target_development_profile_map.empty?
-
-        certificate = portal_certificate
-        profile = portal_profile
+      portal_certificate_path = path_development_certificate_map.keys[0] unless path_development_certificate_map.empty?
+      if portal_certificate_path
+        profile = target_development_profile_map.values[0] unless target_development_profile_map.empty?
+        certificate_path = portal_certificate_path
+        passphrase = path_development_certificate_passphrase_map[certificate_path]
       else
-        portal_certificate = path_production_certificate_map.values[0] unless path_production_certificate_map.empty?
+        portal_certificate_path = path_production_certificate_map.keys[0] unless path_production_certificate_map.empty?
         if portal_certificate
-          portal_profile = target_production_profile_map.values[0] unless target_production_profile_map.empty?
-
-          certificate = portal_certificate
-          profile = portal_profile
+          profile = target_production_profile_map.values[0] unless target_production_profile_map.empty?
+          certificate_path = portal_certificate_path
+          passphrase = path_production_certificate_passphrase_map[certificate_path]
         end
       end
 
+      certificate_content = File.read(certificate_path)
+      p12 = OpenSSL::PKCS12.new(certificate_content, passphrase)
+      certificate = p12.certificate
+      common_name = cert.subject.to_a.find { |name, _, _| name == 'CN' }[1]
 
       log_details('CODE_SIGN_STYLE: Manual')
       log_details('ProvisioningStyle: Manual')
@@ -277,7 +280,7 @@ begin
       team_id = certificate.owner_id
       log_details("DEVELOPMENT_TEAM: #{team_id}")
 
-      code_sign_identity = certificate.name
+      code_sign_identity = common_name
       log_details("CODE_SIGN_IDENTITY: #{code_sign_identity}")
 
       provisioning_profile_uuid = profile.uuid
