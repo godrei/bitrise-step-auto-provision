@@ -147,7 +147,7 @@ class ProjectHelper
   def force_code_sign_properties(project_path, target, development_team, code_sign_identity, provisioning_profile_uuid)
     project = Xcodeproj::Project.open(project_path)
     project.targets.each do |target_obj|
-      next if target_obj.name == target
+      next unless target_obj.name == target
 
       # force manual code singing
       target_id = target_obj.uuid
