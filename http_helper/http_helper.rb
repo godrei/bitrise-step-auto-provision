@@ -31,13 +31,13 @@ def download_to_path(url, path)
   io.write(chunk)
 end
 
-def download_to_tmp_file(url)
+def download_to_tmp_file(url, filename)
   path = nil
   if url.start_with?('file://')
     path = url.sub('file://', '')
     raise "Certificate not exist at: #{path}" unless File.exist?(path)
   else
-    path = create_tmp_file('Certificate.p12')
+    path = create_tmp_file(filename)
     download_to_path(url, path)
   end
   path

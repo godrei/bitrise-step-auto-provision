@@ -81,7 +81,7 @@ begin
 
   certificate_passphrase_map = {}
   certificate_urls.each_with_index do |url, idx|
-    path = download_to_tmp_file(url)
+    path = download_to_tmp_file(url, "Certrificate#{idx}.p12")
     passphrase = passphrases[idx]
     certificate_passphrase_map[path] = passphrase
   end
