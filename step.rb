@@ -14,6 +14,45 @@ require_relative 'auto-provision/generator'
 require_relative 'auto-provision/app_services'
 require_relative 'keychain/keychain'
 
+# CertificateInfo
+class CertificateInfo
+  attr_accessor :path
+  attr_accessor :passphrase
+  attr_accessor :certificate
+  attr_accessor :portal_certificate
+
+  @path = nil
+  @passphrase = nil
+  @certificate = nil
+  @portal_certificate = nil
+end
+
+# ProfileInfo
+class ProfileInfo
+  attr_accessor :path
+  attr_accessor :profile
+  attr_accessor :portal_profile
+
+  @path = nil
+  @profile = nil
+  @portal_profile = nil
+end
+
+# CodesignSettings
+class CodesignSettings
+  attr_accessor :team_id
+  attr_accessor :development_certificates
+  attr_accessor :production_certificates
+  attr_accessor :bundle_id_development_profile
+  attr_accessor :bundle_id_production_profile
+
+  @team_id = nil
+  @development_certificates = []
+  @production_certificates = []
+  @bundle_id_development_profile = {}
+  @bundle_id_production_profile = {}
+end
+
 # Params
 class Params
   attr_accessor :build_url
@@ -115,48 +154,58 @@ begin
   passphrases = split_pipe_separated_list(params.passphrases)
   raise "certificates count (#{certificate_urls.length}) and passphrases count (#{passphrases.length}) should match" unless certificate_urls.length == passphrases.length
 
-  certificate_passphrase_map = {}
+  certificate_infos = []
+
   certificate_urls.each_with_index do |url, idx|
     log_debug("downloading certificate ##{idx + 1}")
     path = download_to_tmp_file(url, "Certrificate#{idx}.p12")
     log_debug("certificate path: #{path}")
+
     passphrase = passphrases[idx]
-    certificate_passphrase_map[path] = passphrase
+
+    certificate_info = CertificateInfo.new
+    certificate_info.path = path
+    certificate_info.passphrase = passphrase
+
+    certificate_infos.push(certificate_info)
   end
-  log_done("#{certificate_passphrase_map.length} certificates downloaded")
+  log_done("#{certificate_infos.length} certificates downloaded")
   ###
 
   # Find certificates on Developer Portal
   log_info('Identify Certificates on developer Portal')
 
-  path_development_certificate_map = {}
-  path_development_certificate_passphrase_map = {}
+  development_certificate_infos = []
+  production_certificate_infos = []
 
-  path_production_certificate_map = {}
-  path_production_certificate_passphrase_map = {}
+  certificate_infos.each do |certificate_info|
+    certificate_content = File.read(certificate_info.path)
+    log_debug("searching for Certificate (#{certificate_info.path})")
+    raise "Invalid certificate file #{certificate_info.path}: empty" if certificate_content.to_s.empty?
 
-  certificate_passphrase_map.each do |certificate_path, passphrase|
-    log_debug("searching for Certificate (#{certificate_path})")
+    p12 = OpenSSL::PKCS12.new(certificate_content, certificate_info.passphrase)
 
-    portal_certificate = find_development_portal_certificate(certificate_path, passphrase)
+    portal_certificate = find_development_portal_certificate(p12.certificate)
     if portal_certificate
       log_done("development Certificate found: #{portal_certificate.name}")
-      raise 'multiple development certificates provided: step can handle only one development (and only one production) certificate' if path_development_certificate_map[certificate_path]
+      raise 'multiple development certificates provided: step can handle only one development (and only one production) certificate' unless development_certificate_infos.empty?
 
-      path_development_certificate_map[certificate_path] = portal_certificate
-      path_development_certificate_passphrase_map[certificate_path] = passphrase
+      certificate_info.certificate = p12.certificate
+      certificate_info.portal_certificate = portal_certificate
+      development_certificate_infos.push(certificate_info)
     end
 
-    portal_certificate = find_production_portal_certificate(certificate_path, passphrase)
+    portal_certificate = find_production_portal_certificate(p12.certificate)
     next unless portal_certificate
 
     log_done("production Certificate found: #{portal_certificate.name}")
-    raise 'multiple production certificates provided: step can handle only one production (and only one development) certificate' if path_production_certificate_map[certificate_path]
+    raise 'multiple production certificates provided: step can handle only one production (and only one development) certificate' unless production_certificate_infos.empty?
 
-    path_production_certificate_map[certificate_path] = portal_certificate
-    path_production_certificate_passphrase_map[certificate_path] = passphrase
+    certificate_info.certificate = p12.certificate
+    certificate_info.portal_certificate = portal_certificate
+    production_certificate_infos.push(certificate_info)
   end
-  raise 'no development nor production certificate identified on development portal' if path_development_certificate_map.empty? && path_production_certificate_map.empty?
+  raise 'no development nor production certificate identified on development portal' if development_certificate_infos.empty? && production_certificate_infos.empty?
   ###
 
   # Ensure test devices
@@ -192,15 +241,15 @@ begin
   # Anlyzing project
   log_info('Ensure App IDs and Provisioning Profiles on Developer Portal')
 
-  target_development_profile_map = {}
-  target_development_profile_path_map = {}
-
-  target_production_profile_map = {}
-  target_production_profile_path_map = {}
+  project_codesign_settings = {}
 
   project_target_bundle_id.each do |path, target_bundle_id|
-    target_entitlements = project_target_entitlements[path]
     log_details("checking project: #{path}")
+    codesign_settings = CodesignSettings.new
+    bundle_id_development_profile = {}
+    bundle_id_production_profile = {}
+
+    target_entitlements = project_target_entitlements[path]
     target_bundle_id.each do |target, bundle_id|
       entitlements = target_entitlements[target]
       puts
@@ -212,34 +261,44 @@ begin
       log_details("sync App ID (#{bundle_id}) Services")
       app = sync_app_services(app, entitlements)
 
-      development_portal_certificate = path_development_certificate_map.values[0] unless path_development_certificate_map.empty?
-      if development_portal_certificate
+      unless development_certificate_infos.empty?
         log_details('ensure Development Provisioning Profile on Developer Portal')
+        portal_profile = ensure_provisioning_profile(development_certificate_infos[0].portal_certificate, app, 'development', test_devices)
 
-        profile = ensure_provisioning_profile(development_portal_certificate, app, 'development', test_devices)
-        target_development_profile_map[target] = profile
+        log_done("downloading development profile: #{portal_profile.name}")
+        profile_path = download_profile(portal_profile)
 
-        log_done("downloading development profile: #{profile.name}")
-        profile_path = download_profile(profile)
         log_debug("profile path: #{profile_path}")
-        target_development_profile_path_map[target] = profile_path
+
+        profile_info = ProfileInfo.new
+        profile_info.path = profile_path
+        profile_info.portal_profile = portal_profile
+        bundle_id_development_profile[bundle_id] = profile_info
       end
 
       next if params.distributon_type == 'development'
-
-      production_portal_certificate = path_production_certificate_map.values[0] unless path_production_certificate_map.empty?
-      next unless production_portal_certificate
+      next if production_certificate_infos.empty?
 
       log_details('ensure Production Provisioning Profile on Developer Portal')
+      portal_profile = ensure_provisioning_profile(production_certificate_infos[0].portal_certificate, app, params.distributon_type, test_devices)
 
-      profile = ensure_provisioning_profile(production_portal_certificate, app, params.distributon_type, test_devices)
-      target_production_profile_map[target] = profile
+      log_done("downloading #{params.distributon_type} profile: #{portal_profile.name}")
+      profile_path = download_profile(portal_profile)
 
-      log_done("downloading #{params.distributon_type} profile: #{profile.name}")
-      profile_path = download_profile(profile)
       log_debug("profile path: #{profile_path}")
-      target_production_profile_path_map[target] = profile_path
+
+      profile_info = ProfileInfo.new
+      profile_info.path = profile_path
+      profile_info.portal_profile = portal_profile
+      bundle_id_production_profile[bundle_id] = profile_info
     end
+
+    codesign_settings.team_id = params.team_id
+    codesign_settings.development_certificates = development_certificate_infos
+    codesign_settings.production_certificates = production_certificate_infos
+    codesign_settings.bundle_id_development_profile = bundle_id_development_profile
+    codesign_settings.bundle_id_production_profile = bundle_id_production_profile
+    project_codesign_settings[path] = codesign_settings
   end
   ###
 
@@ -248,50 +307,36 @@ begin
 
   project_target_bundle_id.each do |path, target_bundle_id|
     log_details("checking project: #{path}")
+    codesign_settings = project_codesign_settings[path]
+
     target_bundle_id.each do |target, bundle_id|
       puts
       log_done("checking target: #{target} (#{bundle_id})")
-      portal_certificate = nil
-      certificate_path = nil
-      passphrase = nil
-      profile = nil
 
-      portal_certificate_path = path_development_certificate_map.keys[0] unless path_development_certificate_map.empty?
-      if portal_certificate_path
-        profile = target_development_profile_map[target]
-        certificate_path = portal_certificate_path
-        passphrase = path_development_certificate_passphrase_map[certificate_path]
-        portal_certificate = path_development_certificate_map[certificate_path]
+      team_id = codesign_settings.team_id
+      code_sign_identity = nil
+      provisioning_profile = nil
+
+      if !codesign_settings.development_certificates.empty?
+        code_sign_identity = codesign_settings.development_certificates[0].certificate.subject.to_a.find { |name, _, _| name == 'CN' }[1]
+        provisioning_profile = codesign_settings.bundle_id_development_profile[bundle_id].portal_profile.uuid
+      elsif !codesign_settings.production_certificates.empty?
+        code_sign_identity = codesign_settings.production_certificates[0].certificate.subject.to_a.find { |name, _, _| name == 'CN' }[1]
+        provisioning_profile = codesign_settings.bundle_id_production_profile[bundle_id].portal_profile.uuid
       else
-        portal_certificate_path = path_production_certificate_map.keys[0] unless path_production_certificate_map.empty?
-        if portal_certificate
-          profile = target_production_profile_map[target]
-          certificate_path = portal_certificate_path
-          passphrase = path_production_certificate_passphrase_map[certificate_path]
-          portal_certificate = path_production_certificate_map[certificate_path]
-        end
+        raise "no codesign settings generated for target: #{target} (#{bundle_id})"
       end
-
-      certificate_content = File.read(certificate_path)
-      p12 = OpenSSL::PKCS12.new(certificate_content, passphrase)
-      certificate = p12.certificate
-      common_name = certificate.subject.to_a.find { |name, _, _| name == 'CN' }[1]
 
       log_details('CODE_SIGN_STYLE: Manual')
       log_details('ProvisioningStyle: Manual')
-
-      team_id = portal_certificate.owner_id
       log_details("DEVELOPMENT_TEAM: #{team_id}")
-
-      code_sign_identity = common_name
       log_details("CODE_SIGN_IDENTITY: #{code_sign_identity}")
+      log_details("PROVISIONING_PROFILE: #{provisioning_profile}")
 
-      provisioning_profile_uuid = profile.uuid
-      log_details("PROVISIONING_PROFILE: #{provisioning_profile_uuid}")
-
-      project_helper.force_code_sign_properties(path, target, team_id, code_sign_identity, provisioning_profile_uuid)
+      project_helper.force_code_sign_properties(path, target, team_id, code_sign_identity, provisioning_profile)
 
       build_settings = project_helper.xcodebuild_target_build_settings(path, target)
+      log_debug('')
       log_debug('build settings:')
       build_settings.each { |key, value| log_debug("#{key}: #{value}") }
     end
@@ -303,8 +348,8 @@ begin
 
   keychain_helper = KeychainHelper.new(params.keychain_path, params.keychain_password)
 
-  certificate_passphrase_map.each do |path, passphrase|
-    keychain_helper.import_certificate(path, passphrase)
+  certificate_infos.each do |certificate_info|
+    keychain_helper.import_certificate(certificate_info.path, certificate_info.passphrase)
   end
 
   keychain_helper.set_key_partition_list_if_needed
@@ -313,7 +358,7 @@ begin
   keychain_helper.set_default_keychain
   keychain_helper.unlock_keychain
 
-  log_done("#{certificate_passphrase_map.length} certificates installed")
+  log_done("#{certificate_infos.length} certificates installed")
   ###
 rescue => ex
   puts

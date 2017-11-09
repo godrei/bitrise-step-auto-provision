@@ -21,15 +21,7 @@ def certificate_matches(certificate1, certificate2)
   certificate1.serial == certificate2.serial
 end
 
-def find_development_portal_certificate(local_certificate_path, local_certificate_passphrase)
-  raise "Certificate file #{local_certificate_path} does not exist" unless File.file?(local_certificate_path)
-
-  certificate_content = File.read(local_certificate_path)
-  raise "Invalid certificate file #{local_certificate_path}: empty" if certificate_content.to_s.empty?
-
-  p12 = OpenSSL::PKCS12.new(certificate_content, local_certificate_passphrase)
-  local_certificate = p12.certificate
-
+def find_development_portal_certificate(local_certificate)
   portal_development_certificates = Spaceship::Portal.certificate.development.all
   log_debug('no development Certificates belongs to the account in this team') if portal_development_certificates.to_a.empty?
   portal_development_certificates.each do |cert|
@@ -41,15 +33,7 @@ def find_development_portal_certificate(local_certificate_path, local_certificat
   nil
 end
 
-def find_production_portal_certificate(local_certificate_path, local_certificate_passphrase)
-  raise "Certificate file #{local_certificate_path} does not exist" unless File.file?(local_certificate_path)
-
-  certificate_content = File.read(local_certificate_path)
-  raise "Invalid certificate file #{local_certificate_path}: empty" if certificate_content.to_s.empty?
-
-  p12 = OpenSSL::PKCS12.new(certificate_content, local_certificate_passphrase)
-  local_certificate = p12.certificate
-
+def find_production_portal_certificate(local_certificate)
   portal_production_certificates = Spaceship::Portal.certificate.production.all
   log_debug('no production Certificates belongs to the account in this team') if portal_production_certificates.to_a.empty?
   portal_production_certificates.each do |cert|
@@ -62,6 +46,9 @@ def find_production_portal_certificate(local_certificate_path, local_certificate
 end
 
 def ensure_test_devices(test_devices)
+  puts "test_devices: #{test_devices}"
+  return [] if test_devices.to_a.empty?
+
   updated_portal_devices = []
 
   portal_devices = Spaceship::Portal.device.all(mac: false, include_disabled: true) || []
@@ -119,6 +106,8 @@ def ensure_profile_certificate(profile, certificate)
 end
 
 def ensure_profile_devices(profile, devices)
+  return profile if devices.to_a.empty?
+
   profile_devices = profile.devices
   updated_devices = [].concat(profile_devices)
 

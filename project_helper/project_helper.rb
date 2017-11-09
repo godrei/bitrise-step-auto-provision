@@ -162,6 +162,7 @@ class ProjectHelper
         build_settings['DEVELOPMENT_TEAM'] = development_team
         build_settings['CODE_SIGN_IDENTITY'] = code_sign_identity
         build_settings['PROVISIONING_PROFILE'] = provisioning_profile_uuid
+        build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''
         build_settings['CODE_SIGN_STYLE'] = 'Manual'
       end
     end
