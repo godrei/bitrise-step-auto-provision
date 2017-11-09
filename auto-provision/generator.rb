@@ -58,7 +58,7 @@ def ensure_test_devices(test_devices)
     registered_test_device = nil
 
     portal_devices.each do |portal_device|
-      next unless portal_device.udid == test_device.uuid
+      next unless portal_device.udid == test_device.device_identifier
 
       registered_test_device = portal_device
       log_done("test device #{registered_test_device.name} (#{registered_test_device.udid}) already registered")
@@ -66,7 +66,7 @@ def ensure_test_devices(test_devices)
     end
 
     unless registered_test_device
-      registered_test_device = Spaceship::Portal.device.create!(name: test_device.name, udid: test_device.uuid)
+      registered_test_device = Spaceship::Portal.device.create!(name: test_device.title, udid: test_device.device_identifier)
       log_done("registering test device #{registered_test_device.name} (#{registered_test_device.udid})")
     end
 
