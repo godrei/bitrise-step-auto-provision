@@ -117,6 +117,12 @@ def ensure_profile_devices(profile, devices)
     device_included = false
 
     profile_devices.each do |profile_device|
+      puts "profile_device:"
+      puts JSON.pretty_generate(profile_device)
+
+      puts "device:"
+      puts JSON.pretty_generate(device)
+
       next unless profile_device.udid == device.udid
 
       device_included = true
