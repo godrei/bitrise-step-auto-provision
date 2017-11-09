@@ -46,8 +46,10 @@ def find_production_portal_certificate(local_certificate)
 end
 
 def ensure_test_devices(test_devices)
-  puts "test_devices: #{test_devices}"
-  return [] if test_devices.to_a.empty?
+  if test_devices.to_a.empty?
+    log_done('no test devices registered on bitrise')
+    return []
+  end
 
   updated_portal_devices = []
 
