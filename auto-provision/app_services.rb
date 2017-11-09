@@ -1,7 +1,7 @@
 require 'fastlane'
 
 def sync_app_services(app, entitlements)
-  entitlements ||= {}
+  entitlements = {} if entitlements.to_a.empty?
 
   # App Groups
   if entitlements['com.apple.security.application-groups']
