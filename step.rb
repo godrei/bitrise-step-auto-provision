@@ -263,7 +263,7 @@ begin
 
       unless development_certificate_infos.empty?
         log_details('ensure Development Provisioning Profile on Developer Portal')
-        portal_profile = ensure_provisioning_profile(development_certificate_infos[0].portal_certificate, app, 'development', test_devices)
+        portal_profile = ensure_provisioning_profile(development_certificate_infos[0].portal_certificate, app, 'development')
 
         log_done("downloading development profile: #{portal_profile.name}")
         profile_path = download_profile(portal_profile)
@@ -280,7 +280,7 @@ begin
       next if production_certificate_infos.empty?
 
       log_details('ensure Production Provisioning Profile on Developer Portal')
-      portal_profile = ensure_provisioning_profile(production_certificate_infos[0].portal_certificate, app, params.distributon_type, test_devices)
+      portal_profile = ensure_provisioning_profile(production_certificate_infos[0].portal_certificate, app, params.distributon_type)
 
       log_done("downloading #{params.distributon_type} profile: #{portal_profile.name}")
       profile_path = download_profile(portal_profile)

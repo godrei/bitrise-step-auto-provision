@@ -90,12 +90,18 @@ def sync_app_services(app, entitlements)
   if icould_container_value
     log_done('set icloud: on')
     app = app.update_service(Spaceship::Portal.app_service.icloud.on)
+
+    log_done('set cloud_kit: cloud_kit')
+    app = app.update_service(Spaceship::Portal.app_service.cloud_kit.cloud_kit)
   end
 
   icloud_kvs_value = entitlements['com.apple.developer.ubiquity-kvstore-identifier']
   if icloud_kvs_value
     log_done('set icloud: on')
     app = app.update_service(Spaceship::Portal.app_service.icloud.on)
+
+    log_done('set cloud_kit: cloud_kit')
+    app = app.update_service(Spaceship::Portal.app_service.cloud_kit.cloud_kit)
   end
 
   icould_services_value = entitlements['com.apple.developer.icloud-services']

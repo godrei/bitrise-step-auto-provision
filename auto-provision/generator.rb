@@ -73,6 +73,7 @@ def ensure_test_devices(test_devices)
     raise 'failed to find or create device' unless registered_test_device
 
     registered_test_device.enable!
+
     updated_portal_devices.push(registered_test_device)
   end
 
@@ -103,142 +104,61 @@ def ensure_profile_certificate(profile, certificate)
     log_debug("#{certificate.name} not registered in profile: #{profile.name}")
     certificates.push(certificate)
     profile.certificates = certificates
+    profile = profile.update!
   end
 
   profile
 end
 
-def ensure_profile_devices(profile, devices)
-  return profile if devices.to_a.empty?
+def ensure_profile(certificate, app, portal_profile_class, distributon_type)
+  profile = nil
 
-  profile_devices = profile.devices
-  updated_devices = [].concat(profile_devices)
+  profiles = find_profile_by_bundle_id(portal_profile_class.all, app.bundle_id)
 
-  devices.each do |device|
-    device_included = false
-
-    profile_devices.each do |profile_device|
-      next unless profile_device.udid == device.udid
-
-      device_included = true
-      log_debug("device #{device.name} (#{device.udid}) is included")
-      break
-    end
-
-    unless device_included
-      log_debug(" adding device #{device.name} (#{device.udid}) to profile")
-      updated_devices.push(device)
-    end
+  # Both app_store.all and ad_hoc.all return the same
+  # This is the case since September 2016, since the API has changed
+  # and there is no fast way to get the type when fetching the profiles
+  # Distinguish between App Store and Ad Hoc profiles
+  if portal_profile_class.is_a? Spaceship::Portal::ProvisioningProfile.AppStore
+    puts "AppStore"
+    profiles = profiles.find_all { |current| !current.is_adhoc? }
+  elsif portal_profile_class.is_a? Spaceship::Portal::ProvisioningProfile.AdHoc
+    puts "AdHoc"
+    profiles = profiles.find_all(&:is_adhoc?)
   end
 
-  profile.devices = updated_devices
+  if profiles.to_a.empty?
+    log_done("generating #{distributon_type} provisioning profile found for bundle id: #{app.bundle_id}")
+    profile = portal_profile_class.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise #{distributon_type} - (#{app.bundle_id})")
+  else
+    if profiles.count > 1
+      log_warning("multiple #{distributon_type} provisionig profiles found for bundle id: #{app.bundle_id}, using first:")
+      profiles.each_with_index { |prof, index| log_warning("#{index}. #{prof.name}") }
+    end
+
+    profile = profiles.first
+    log_done("found #{distributon_type} profile: #{profile.name} (#{profile.uuid}) for bundle id (#{app.bundle_id}) already exist")
+
+    # ensure certificate is included
+    log_debug("ensure #{certificate.name} is included in profile")
+    profile = ensure_profile_certificate(profile, certificate)
+  end
+
   profile
 end
 
-def ensure_provisioning_profile(certificate, app, distributon_type, test_devices)
+def ensure_provisioning_profile(certificate, app, distributon_type)
   profile = nil
 
   case distributon_type
   when 'development'
-    profiles = find_profile_by_bundle_id(Spaceship::Portal.provisioning_profile.development.all, app.bundle_id)
-    if profiles.to_a.empty?
-      log_done("generating development provisioning profile found for bundle id: #{app.bundle_id}")
-      profile = Spaceship::Portal.provisioning_profile.development.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise Development - (#{app.bundle_id})")
-    else
-      if profiles.count > 1
-        log_warning("multiple development provisionig profiles found for bundle id: #{app.bundle_id}, using first:")
-        profiles.each_with_index { |prof, index| log_warning("#{index}. #{prof.name}") }
-      end
-
-      profile = profiles.first
-      log_done("found development profile: #{profile.name} (#{profile.uuid}) for bundle id (#{app.bundle_id}) already exist")
-
-      # ensure certificate is included
-      log_debug("ensure #{certificate.name} is included in profile")
-      profile = ensure_profile_certificate(profile, certificate)
-    end
-
-    # register test devices
-    log_debug('ensure test devices are included in profile')
-    profile = ensure_profile_devices(profile, test_devices)
-
-    profile = profile.update!
+    profile = ensure_profile(certificate, app, Spaceship::Portal.provisioning_profile.development, distributon_type)
   when 'app-store'
-    # Both app_store.all and ad_hoc.all return the same
-    # This is the case since September 2016, since the API has changed
-    # and there is no fast way to get the type when fetching the profiles
-    profiles_appstore_adhoc = find_profile_by_bundle_id(Spaceship::Portal.provisioning_profile.app_store.all, app.bundle_id)
-    # Distinguish between App Store and Ad Hoc profiles
-    profiles = profiles_appstore_adhoc.find_all { |current| !current.is_adhoc? }
-
-    if profiles.to_a.empty?
-      log_done("generating app store provisioning profile found for bundle id: #{app.bundle_id}")
-      profile = Spaceship::Portal.provisioning_profile.app_store.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise App Store - (#{app.bundle_id})")
-    else
-      if profiles.count > 1
-        log_warning("multiple app store provisionig profiles found for bundle id: #{app.bundle_id}, using first:")
-        profiles.each_with_index { |prof, index| log_warning("#{index}. #{prof.name}") }
-      end
-
-      profile = profiles.first
-      log_done("found app store profile: #{profile.name} (#{profile.uuid}) for bundle id (#{app.bundle_id}) already exist")
-
-      # ensure certificate is included
-      log_debug("ensure #{certificate.name} is included in profile")
-      profile = ensure_profile_certificate(profile, certificate)
-
-      profile = profile.update!
-    end
+    profile = ensure_profile(certificate, app, Spaceship::Portal.provisioning_profile.app_store, distributon_type)
   when 'ad-hoc'
-    # Both app_store.all and ad_hoc.all return the same
-    # This is the case since September 2016, since the API has changed
-    # and there is no fast way to get the type when fetching the profiles
-    profiles_appstore_adhoc = find_profile_by_bundle_id(Spaceship::Portal.provisioning_profile.ad_hoc.all, app.bundle_id)
-    # Distinguish between App Store and Ad Hoc profiles
-    profiles = profiles_appstore_adhoc.find_all(&:is_adhoc?)
-
-    if profiles.to_a.empty?
-      log_done("generating ad hoc provisioning profile found for bundle id: #{app.bundle_id}")
-      profile = Spaceship::Portal.provisioning_profile.ad_hoc.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise Ad Hoc - (#{app.bundle_id})")
-    else
-      if profiles.count > 1
-        log_warning("multiple ad hoc provisionig profiles found for bundle id: #{app.bundle_id}, using first:")
-        profiles.each_with_index { |prof, index| log_warning("#{index}. #{prof.name}") }
-      end
-
-      profile = profiles.first
-      log_done("found app store profile: #{profile.name} (#{profile.uuid}) for bundle id (#{app.bundle_id}) already exist")
-
-      # ensure certificate is included
-      log_debug("ensure #{certificate.name} is included in profile")
-      profile = ensure_profile_certificate(profile, certificate)
-    end
-
-    # register test devices
-    log_debug('ensure test devices are included in profile')
-    profile = ensure_profile_devices(profile, test_devices)
-
-    profile = profile.update!
+    profile = ensure_profile(certificate, app, Spaceship::Portal.provisioning_profile.ad_hoc, distributon_type)
   when 'enterprise'
-    profiles = find_profile_by_bundle_id(Spaceship::Portal.provisioning_profile.in_house.all, app.bundle_id)
-    if profiles.to_a.empty?
-      log_done("generating enterprise provisioning profile found for bundle id: #{app.bundle_id}")
-      profile = Spaceship::Portal.provisioning_profile.in_house.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise Enterprise - (#{app.bundle_id})")
-    else
-      if profiles.count > 1
-        log_warning("multiple enterprise provisionig profiles found for bundle id: #{app.bundle_id}, using first:")
-        profiles.each_with_index { |prof, index| log_warning("#{index}. #{prof.name}") }
-      end
-
-      profile = profiles.first
-      log_done("found app store profile: #{profile.name} (#{profile.uuid}) for bundle id (#{app.bundle_id}) already exist")
-
-      # ensure certificate is included
-      log_debug("ensure #{certificate.name} is included in profile")
-      profile = ensure_profile_certificate(profile, certificate)
-
-      profile = profile.update!
-    end
+    profile = ensure_profile(certificate, app, Spaceship::Portal.provisioning_profile.in_house, distributon_type)
   else
     raise "invalid distribution type provided: #{distributon_type}, available: [development, app-store, ad-hoc, enterprise]"
   end
