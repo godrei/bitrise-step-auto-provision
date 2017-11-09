@@ -72,6 +72,7 @@ def ensure_test_devices(test_devices)
 
     raise 'failed to find or create device' unless registered_test_device
 
+    registered_test_device.enable!
     updated_portal_devices.push(registered_test_device)
   end
 
@@ -117,12 +118,6 @@ def ensure_profile_devices(profile, devices)
     device_included = false
 
     profile_devices.each do |profile_device|
-      puts "profile_device:"
-      puts JSON.pretty_generate(profile_device)
-
-      puts "device:"
-      puts JSON.pretty_generate(device)
-
       next unless profile_device.udid == device.udid
 
       device_included = true

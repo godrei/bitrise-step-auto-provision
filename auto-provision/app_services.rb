@@ -3,7 +3,8 @@ require 'fastlane'
 def sync_app_services(app, entitlements)
   entitlements = {} if entitlements.to_a.empty?
 
-  puts "app: #{app.details}"
+  # features = app.details.features
+  # services = app.details.enable_services
 
   # App Groups
   if entitlements['com.apple.security.application-groups']
