@@ -332,6 +332,7 @@ begin
       log_details("DEVELOPMENT_TEAM: #{team_id}")
       log_details("CODE_SIGN_IDENTITY: #{code_sign_identity}")
       log_details("PROVISIONING_PROFILE: #{provisioning_profile}")
+      log_details('PROVISIONING_PROFILE_SPECIFIER: \'\'')
 
       project_helper.force_code_sign_properties(path, target, team_id, code_sign_identity, provisioning_profile)
 
