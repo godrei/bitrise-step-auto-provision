@@ -48,10 +48,8 @@ end
 def ensure_test_devices(test_devices)
   if test_devices.to_a.empty?
     log_done('no test devices registered on bitrise')
-    return []
+    return
   end
-
-  updated_portal_devices = []
 
   portal_devices = Spaceship::Portal.device.all(mac: false, include_disabled: true) || []
   test_devices.each do |test_device|
@@ -73,11 +71,7 @@ def ensure_test_devices(test_devices)
     raise 'failed to find or create device' unless registered_test_device
 
     registered_test_device.enable!
-
-    updated_portal_devices.push(registered_test_device)
   end
-
-  updated_portal_devices
 end
 
 def find_profile_by_bundle_id(profiles, bundle_id)
@@ -110,23 +104,33 @@ def ensure_profile_certificate(profile, certificate)
   profile
 end
 
-def ensure_profile(certificate, app, portal_profile_class, distributon_type)
-  profile = nil
+def ensure_provisioning_profile(certificate, app, distributon_type)
+  portal_profile_class = nil
+  case distributon_type
+  when 'development'
+    portal_profile_class = Spaceship::Portal.provisioning_profile.development
+  when 'app-store'
+    portal_profile_class = Spaceship::Portal.provisioning_profile.app_store
+  when 'ad-hoc'
+    portal_profile_class = Spaceship::Portal.provisioning_profile.ad_hoc
+  when 'enterprise'
+    portal_profile_class = Spaceship::Portal.provisioning_profile.in_house
+  else
+    raise "invalid distribution type provided: #{distributon_type}, available: [development, app-store, ad-hoc, enterprise]"
+  end
 
   profiles = find_profile_by_bundle_id(portal_profile_class.all, app.bundle_id)
-
   # Both app_store.all and ad_hoc.all return the same
   # This is the case since September 2016, since the API has changed
   # and there is no fast way to get the type when fetching the profiles
   # Distinguish between App Store and Ad Hoc profiles
-  if portal_profile_class.is_a? Spaceship::Portal::ProvisioningProfile.AppStore
-    puts "AppStore"
+  if distributon_type == 'app-store'
     profiles = profiles.find_all { |current| !current.is_adhoc? }
-  elsif portal_profile_class.is_a? Spaceship::Portal::ProvisioningProfile.AdHoc
-    puts "AdHoc"
+  elsif distributon_type == 'ad-hoc'
     profiles = profiles.find_all(&:is_adhoc?)
   end
 
+  profile = nil
   if profiles.to_a.empty?
     log_done("generating #{distributon_type} provisioning profile found for bundle id: #{app.bundle_id}")
     profile = portal_profile_class.create!(bundle_id: app.bundle_id, certificate: certificate, name: "Bitrise #{distributon_type} - (#{app.bundle_id})")
@@ -142,28 +146,16 @@ def ensure_profile(certificate, app, portal_profile_class, distributon_type)
     # ensure certificate is included
     log_debug("ensure #{certificate.name} is included in profile")
     profile = ensure_profile_certificate(profile, certificate)
-  end
 
-  profile
-end
+    # add all available devices to the profile
+    if ['development', 'ad-hoc'].include?(distributon_type)
+      log_debug('update profile devices')
+      profile.devices = Spaceship::Portal.device.all
+    end
 
-def ensure_provisioning_profile(certificate, app, distributon_type)
-  profile = nil
-
-  case distributon_type
-  when 'development'
-    profile = ensure_profile(certificate, app, Spaceship::Portal.provisioning_profile.development, distributon_type)
-  when 'app-store'
-    profile = ensure_profile(certificate, app, Spaceship::Portal.provisioning_profile.app_store, distributon_type)
-  when 'ad-hoc'
-    profile = ensure_profile(certificate, app, Spaceship::Portal.provisioning_profile.ad_hoc, distributon_type)
-  when 'enterprise'
-    profile = ensure_profile(certificate, app, Spaceship::Portal.provisioning_profile.in_house, distributon_type)
-  else
-    raise "invalid distribution type provided: #{distributon_type}, available: [development, app-store, ad-hoc, enterprise]"
+    profile.update!
   end
 
   raise "failed to find or create provisioning profile for bundle id: #{app.bundle_id}" unless profile
-
   profile
 end

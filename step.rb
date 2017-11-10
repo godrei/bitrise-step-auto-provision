@@ -121,6 +121,31 @@ def split_pipe_separated_list(list)
   list.split('|').map(&:strip)
 end
 
+def certificate_common_name(certificate)
+  certificate.subject.to_a.find { |name, _, _| name == 'CN' }[1]
+end
+
+def certificate_team_id(certificate)
+  certificate.subject.to_a.find { |name, _, _| name == 'OU' }[1]
+end
+
+def find_certificate_info_by_identity(identity, certificate_infos)
+  certificate_infos.each do |certificate_info|
+    common_name = certificate_common_name(certificate_info.certificate)
+    return certificate_info if common_name.downcase.include?(identity.downcase)
+  end
+  nil
+end
+
+def find_certificate_infos_by_team_id(team_id, certificate_infos)
+  matching_certificate_infos = []
+  certificate_infos.each do |certificate_info|
+    org_unit = certificate_team_id(certificate_info.certificate)
+    matching_certificate_infos.push(certificate_info) if org_unit.downcase.include?(team_id.downcase)
+  end
+  matching_certificate_infos
+end
+
 begin
   # Params
   params = Params.new
@@ -128,6 +153,31 @@ begin
   params.validate
 
   DEBUG_LOG = (params.verbose_log == 'yes')
+  ###
+
+  # Anlyzing project
+  log_info('Anlyzing project')
+
+  project_helper = ProjectHelper.new(params.project_path)
+
+  project_target_bundle_id = project_helper.project_target_bundle_id_map
+  raise 'no targets found' if project_target_bundle_id.to_a.empty?
+
+  project_target_entitlements = project_helper.project_target_entitlements_map
+  raise 'no targets found' if project_target_entitlements.to_a.empty?
+  raise 'analyzer failed' unless project_target_bundle_id.to_a.length == project_target_entitlements.to_a.length
+
+  project_target_bundle_id.each do |project_path, target_bundle_id|
+    log_done("project: #{project_path}")
+
+    idx = 0
+    target_bundle_id.each do |target, bundle_id|
+      idx += 1
+      entitlements_count = (project_target_entitlements[project_path][target] || []).length
+
+      log_details("target ##{idx}: #{target} (#{bundle_id}) with #{entitlements_count} services")
+    end
+  end
   ###
 
   # Developer Portal authentication
@@ -155,18 +205,14 @@ begin
   raise "certificates count (#{certificate_urls.length}) and passphrases count (#{passphrases.length}) should match" unless certificate_urls.length == passphrases.length
 
   certificate_infos = []
-
   certificate_urls.each_with_index do |url, idx|
     log_debug("downloading certificate ##{idx + 1}")
     path = download_to_tmp_file(url, "Certrificate#{idx}.p12")
     log_debug("certificate path: #{path}")
 
-    passphrase = passphrases[idx]
-
     certificate_info = CertificateInfo.new
     certificate_info.path = path
-    certificate_info.passphrase = passphrase
-
+    certificate_info.passphrase = passphrases[idx]
     certificate_infos.push(certificate_info)
   end
   log_done("#{certificate_infos.length} certificates downloaded")
@@ -177,7 +223,6 @@ begin
 
   development_certificate_infos = []
   production_certificate_infos = []
-
   certificate_infos.each do |certificate_info|
     certificate_content = File.read(certificate_info.path)
     log_debug("searching for Certificate (#{certificate_info.path})")
@@ -208,37 +253,135 @@ begin
   raise 'no development nor production certificate identified on development portal' if development_certificate_infos.empty? && production_certificate_infos.empty?
   ###
 
-  # Ensure test devices
-  log_info('Ensure test devices on Developer Portal')
-  test_devices = ensure_test_devices(portal_data.test_devices)
-  ###
+  # Find project codesign identity settings
+  log_info('Find project codesign identity settings')
 
-  # Anlyzing project
-  log_info('Anlyzing project')
+  project_codesing_identity_map = {}
+  project_team_id_map = {}
 
-  project_helper = ProjectHelper.new(params.project_path)
+  project_target_bundle_id.each do |path, target_bundle_id|
+    log_details("Checking project: #{path}")
 
-  project_target_bundle_id = project_helper.project_target_bundle_id_map
-  raise 'no targets found' if project_target_bundle_id.to_a.empty?
+    project_codesign_identity = nil
+    project_team_id = nil
 
-  project_target_entitlements = project_helper.project_target_entitlements_map
-  raise 'no targets found' if project_target_entitlements.to_a.empty?
-  raise 'analyzer failed' unless project_target_bundle_id.to_a.length == project_target_entitlements.to_a.length
+    target_bundle_id.each_key do |target, _|
+      settings = project_helper.xcodebuild_target_build_settings(path, target)
 
-  project_target_bundle_id.each do |project_path, target_bundle_id|
-    log_done("project: #{project_path}")
+      codesign_identity = settings['CODE_SIGN_IDENTITY']
+      if codesign_identity.to_s.empty?
+        log_warn('failed to read CODE_SIGN_IDENTITY build settings')
+      elsif project_codesign_identity.nil?
+        project_codesign_identity = codesign_identity
+        log_done("registering codesign identity: #{codesign_identity}")
+      elsif project_codesign_identity != codesign_identity
+        log_warn("target codesign identity: #{codesign_identity} does not match to the project codesign identity: #{project_codesign_identity}")
+        project_codesign_identity = nil
+        break
+      end
 
-    idx = 0
-    target_bundle_id.each do |target, bundle_id|
-      idx += 1
-      entitlements_count = (project_target_entitlements[project_path][target] || []).length
-
-      log_details("target ##{idx}: #{target} (#{bundle_id}) with #{entitlements_count} services")
+      team_id = settings['DEVELOPMENT_TEAM']
+      if team_id.to_s.empty?
+        log_warn('failed to read DEVELOPMENT_TEAM build settings')
+      elsif project_team_id.nil?
+        project_team_id = team_id
+        log_done("registering team id: #{project_team_id}")
+      elsif project_team_id != team_id
+        log_warn("target team id: #{tema_id} does not match to the project team id: #{project_team_id}")
+        project_team_id = nil
+        break
+      end
     end
+
+    project_codesing_identity_map[path] = project_codesign_identity unless project_codesign_identity.nil?
+    project_team_id_map[path] = project_team_id unless project_team_id.nil?
+  end
+
+  # Matching project codesign identity with the uploaded certificates
+  log_info('Matching project codesign identity with the uploaded certificates')
+
+  project_certificate_info_map = {}
+  project_target_bundle_id.each_key do |path|
+    project_certificate_info_map[path] = {}
+
+    # search for codesign identity defined in project build settings
+    codesign_identity = project_codesing_identity_map[path]
+    unless codesign_identity.to_s.empty?
+      log_details("search for codesign identity: #{codesign_identity}")
+      development_certificate_info = find_certificate_info_by_identity(codesign_identity, development_certificate_infos)
+      if development_certificate_info
+        log_done("development certificate found: #{certificate_common_name(development_certificate_info.certificate)}")
+        project_certificate_info_map[path][:develop] = development_certificate_info
+      end
+
+      production_certificate_info = find_certificate_info_by_identity(codesign_identity, production_certificate_infos)
+      if production_certificate_info
+        log_done("production certificate found: #{certificate_common_name(production_certificate_info.certificate)}")
+        project_certificate_info_map[path][:production] = production_certificate_info
+      end
+
+      next unless project_certificate_info_map[path].empty?
+    end
+
+    # search for codesign identity with team defined in project build settings
+    team_id = project_team_id_map[path]
+    unless team_id.to_s.empty?
+      log_details("search for codesign identity in team: #{team_id}")
+
+      development_infos = find_certificate_infos_by_team_id(team_id, development_certificate_infos)
+      if development_infos.empty?
+        log_details('no development certificate found')
+      elsif development_infos.length == 1
+        log_done("development certificate found: #{certificate_common_name(development_infos[0].certificate)}")
+        project_certificate_info_map[path][:develop] = development_infos[0]
+      else
+        log_warn("#{development_infos.length} development certificate found")
+      end
+
+      production_infos = find_certificate_infos_by_team_id(team_id, production_certificate_infos)
+      if production_infos.empty?
+        log_details('no production certificate found')
+      elsif production_infos.lenght == 1
+        log_done("production certificate found: #{certificate_common_name(production_infos[0].certificate)}")
+        project_certificate_info_map[path][:production] = production_infos[0]
+      else
+        log_warn("#{production_infos.length} production certificate found")
+      end
+
+      next unless project_certificate_info_map[path].empty?
+    end
+
+    # use the uploaded codesign identities
+    if development_certificate_infos.empty?
+      log_warn('no development certificate uploaded')
+    elsif development_certificate_infos.length == 1
+      log_done("development certificate found: #{certificate_common_name(development_certificate_infos[0].certificate)}")
+      project_certificate_info_map[path][:develop] = development_certificate_infos[0]
+    else
+      log_warn("#{development_certificate_infos.length} development certificate uploaded")
+    end
+
+    if production_certificate_infos.empty?
+      log_warn('no production certificate uploaded')
+    elsif production_certificate_infos.length == 1
+      log_done("production certificate found: #{certificate_common_name(production_certificate_infos[0].certificate)}")
+      project_certificate_info_map[path][:production] = production_certificate_infos[0]
+    else
+      log_warn("#{production_certificate_infos.length} production certificate uploaded")
+    end
+
+    raise 'failed to determine which codesign identity to use' if project_certificate_info_map[path].empty?
   end
   ###
 
-  # Anlyzing project
+  # Ensure test devices
+  if params.distributon_type == 'development' || params.distributon_type == 'ad-hoc'
+    log_info('Ensure test devices on Developer Portal')
+    ensure_test_devices(portal_data.test_devices)
+  end
+  ###
+
+  # Ensure App IDs and Provisioning Profiles on Developer Portal
   log_info('Ensure App IDs and Provisioning Profiles on Developer Portal')
 
   project_codesign_settings = {}
@@ -261,9 +404,9 @@ begin
       log_details("sync App ID (#{bundle_id}) Services")
       app = sync_app_services(app, entitlements)
 
-      unless development_certificate_infos.empty?
+      if project_certificate_info_map[path][:development]
         log_details('ensure Development Provisioning Profile on Developer Portal')
-        portal_profile = ensure_provisioning_profile(development_certificate_infos[0].portal_certificate, app, 'development')
+        portal_profile = ensure_provisioning_profile(project_certificate_info_map[path][:development].portal_certificate, app, 'development')
 
         log_done("downloading development profile: #{portal_profile.name}")
         profile_path = download_profile(portal_profile)
@@ -277,10 +420,10 @@ begin
       end
 
       next if params.distributon_type == 'development'
-      next if production_certificate_infos.empty?
+      next unless project_certificate_info_map[path][:production]
 
       log_details('ensure Production Provisioning Profile on Developer Portal')
-      portal_profile = ensure_provisioning_profile(production_certificate_infos[0].portal_certificate, app, params.distributon_type)
+      portal_profile = ensure_provisioning_profile(project_certificate_info_map[path][:production].portal_certificate, app, params.distributon_type)
 
       log_done("downloading #{params.distributon_type} profile: #{portal_profile.name}")
       profile_path = download_profile(portal_profile)
@@ -294,8 +437,8 @@ begin
     end
 
     codesign_settings.team_id = params.team_id
-    codesign_settings.development_certificates = development_certificate_infos
-    codesign_settings.production_certificates = production_certificate_infos
+    codesign_settings.development_certificate_info = project_certificate_info_map[path][:development]
+    codesign_settings.production_certificate_info = project_certificate_info_map[path][:production]
     codesign_settings.bundle_id_development_profile = bundle_id_development_profile
     codesign_settings.bundle_id_production_profile = bundle_id_production_profile
     project_codesign_settings[path] = codesign_settings

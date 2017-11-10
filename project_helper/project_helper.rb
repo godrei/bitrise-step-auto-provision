@@ -65,7 +65,7 @@ class ProjectHelper
     settings
   end
 
-  def bundle_id_build_settings(build_settings)
+  def find_bundle_id(build_settings)
     bundle_id = build_settings['PRODUCT_BUNDLE_IDENTIFIER']
 
     if bundle_id.to_s.empty?
@@ -108,7 +108,7 @@ class ProjectHelper
 
       targets.each do |target|
         settings = xcodebuild_target_build_settings(path, target)
-        bundle_id = bundle_id_build_settings(settings)
+        bundle_id = find_bundle_id(settings)
         target_bundle_id[target] = bundle_id
       end
 
