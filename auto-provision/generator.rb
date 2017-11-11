@@ -98,7 +98,6 @@ def ensure_profile_certificate(profile, certificate)
     log_debug("#{certificate.name} not registered in profile: #{profile.name}")
     certificates.push(certificate)
     profile.certificates = certificates
-    profile = profile.update!
   end
 
   profile
@@ -153,7 +152,7 @@ def ensure_provisioning_profile(certificate, app, distributon_type)
       profile.devices = Spaceship::Portal.device.all
     end
 
-    profile.update!
+    profile = profile.update!
   end
 
   raise "failed to find or create provisioning profile for bundle id: #{app.bundle_id}" unless profile

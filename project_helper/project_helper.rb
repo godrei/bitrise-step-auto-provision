@@ -99,6 +99,67 @@ class ProjectHelper
     project_targets
   end
 
+  # 'iPhone Developer' should match to 'iPhone Developer: Bitrise Bot (ABCD)'
+  def codesign_identites_match?(identity1, identity2)
+    return true if identity1.downcase.include?(identity2.downcase)
+    return true if identity2.downcase.include?(identity1.downcase)
+    false
+  end
+
+  # 'iPhone Developer: Bitrise Bot (ABCD)' is exact compared to 'iPhone Developer'
+  def exact_codesign_identity(identity1, identity2)
+    return nil unless codesign_identites_match?(identity1, identity2)
+    identity1.length > identity2.length ? identity1 : identity2
+  end
+
+  def codesign_identity(project_path)
+    target_bundle_id_map = project_target_bundle_id_map[project_path]
+    raise "unkown project path: #{project_path}" unless target_bundle_id_map
+
+    codesign_identity = nil
+    target_bundle_id_map.each_key do |target, _|
+      settings = xcodebuild_target_build_settings(project_path, target)
+
+      identity = settings['CODE_SIGN_IDENTITY']
+      if identity.to_s.empty?
+        log_warn("no CODE_SIGN_IDENTITY build settings found for target: #{target}")
+      elsif codesign_identity.nil?
+        codesign_identity = identity
+        log_done("project codesign identity: #{codesign_identity}")
+      elsif !codesign_identites_match?(codesign_identity, identity)
+        log_warn("target codesign identity: #{identity} does not match to the already registered codesign identity: #{codesign_identity}")
+        codesign_identity = nil
+        break
+      else
+        codesign_identity = exact_codesign_identity(codesign_identity, identity)
+      end
+    end
+    codesign_identity
+  end
+
+  def team_id(project_path)
+    target_bundle_id_map = project_target_bundle_id_map[project_path]
+    raise "unkown project path: #{project_path}" unless target_bundle_id_map
+
+    team_id = nil
+    target_bundle_id_map.each_key do |target, _|
+      settings = xcodebuild_target_build_settings(project_path, target)
+
+      id = settings['DEVELOPMENT_TEAM']
+      if id.to_s.empty?
+        log_warn("no DEVELOPMENT_TEAM build settings found for target: #{target}")
+      elsif team_id.nil?
+        team_id = id
+        log_done("project team id: #{team_id}")
+      elsif team_id != id
+        log_warn("target team id: #{id} does not match to the already registered team id: #{team_id}")
+        team_id = nil
+        break
+      end
+    end
+    team_id
+  end
+
   def project_target_bundle_id_map
     project_target_bundle_id = {}
 
@@ -126,7 +187,8 @@ class ProjectHelper
       target_entitlements = {}
 
       targets.each do |target|
-        entitlements = []
+        entitlements = {}
+
         settings = xcodebuild_target_build_settings(path, target)
         entitlements_path = settings['CODE_SIGN_ENTITLEMENTS']
         unless entitlements_path.to_s.empty?
