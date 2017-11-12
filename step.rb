@@ -217,8 +217,8 @@ begin
   # Developer Portal authentication
   log_info('Developer Portal authentication')
 
-  # portal_data = get_developer_portal_data(params.build_url, params.build_api_token)
-  portal_data = mock_developer_portal_data
+  portal_data = get_developer_portal_data(params.build_url, params.build_api_token)
+  # portal_data = mock_developer_portal_data
   portal_data.validate
 
   log_debug("session cookie: #{portal_data.session_cookies}\n")
