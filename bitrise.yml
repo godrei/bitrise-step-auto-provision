@@ -19,7 +19,7 @@ app:
   - BITRISE_KEYCHAIN_PASSWORD: $BITRISE_KEYCHAIN_PASSWORD
 
   - SAMPLE_APP_URL: https://github.com/bitrise-samples/sample-apps-ios-multi-target.git
-  - BRANCH: master
+  - BRANCH: entitlements
   - BITRISE_PROJECT_PATH: code-sign-test.xcodeproj
   - BITRISE_SCHEME: code-sign-test
 

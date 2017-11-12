@@ -1,7 +1,7 @@
 require 'fastlane'
 
-def sync_app_services(app, entitlements)
-  entitlement_on_off_app_service_map = {
+def entitlement_on_off_app_service_map
+  {
     # App Groups
     'com.apple.security.application-groups' => Spaceship::Portal.app_service.app_group,
     # Apple Pay
@@ -35,53 +35,70 @@ def sync_app_services(app, entitlements)
     # Wireless Accessory Configuration
     'com.apple.external-accessory.wireless-configuration' => Spaceship::Portal.app_service.wireless_accessory
   }
+end
 
+def entitlement_on_off_app_service_name_map
+  {
+    'com.apple.security.application-groups' => 'App Groups',
+    'com.apple.developer.in-app-payments' => 'Apple Pay',
+    'com.apple.developer.associated-domains' => 'Associated Domains',
+    'com.apple.developer.healthkit' => 'HealthKit',
+    'com.apple.developer.homekit' => 'HomeKit',
+    'com.apple.developer.networking.HotspotConfiguration' => 'Hotspot',
+    'com.apple.InAppPurchase' => 'In-App Purchase',
+    'inter-app-audio' => 'Inter-App Audio',
+    'com.apple.developer.networking.multipath' => 'Multipath',
+    'com.apple.developer.networking.networkextension' => 'Network Extensions',
+    'com.apple.developer.nfc.readersession.formats' => 'NFC Tag Reading',
+    'com.apple.developer.networking.vpn.api' => 'Personal VPN',
+    'aps-environment' => 'Push Notifications',
+    'com.apple.developer.siri' => 'SiriKit',
+    'com.apple.developer.pass-type-identifiers' => 'Wallet',
+    'com.apple.external-accessory.wireless-configuration' => 'Wireless Accessory Configuration',
+  }
+end
+
+def sync_app_services(app, entitlements)
   entitlements ||= {}
 
-  # features = app.details.features
-  # services = app.details.enable_services
-
+  # on-off services
   entitlements.each_key do |key|
     on_off_app_service = entitlement_on_off_app_service_map[key]
     next unless on_off_app_service
 
-    app = on_off_app_service.on
-    log_done("set #{key}: on")
+    service_name = entitlement_on_off_app_service_name_map[key]
+    log_done("set #{service_name}: on")
+    app = app.update_service(on_off_app_service.on)
   end
 
   # Data Protection
   data_protection_value = entitlements['com.apple.developer.default-data-protection'] || ''
   if data_protection_value == 'NSFileProtectionComplete'
-    log_done('set com.apple.developer.default-data-protection: complete')
+    log_done('set Data Protection: complete')
     app = app.update_service(Spaceship::Portal.app_service.data_protection.complete)
   elsif data_protection_value == 'NSFileProtectionCompleteUnlessOpen'
-    log_done('set com.apple.developer.default-data-protection: unless_open')
+    log_done('set Data Protection: unless_open')
     app = app.update_service(Spaceship::Portal.app_service.data_protection.unless_open)
   elsif data_protection_value == 'NSFileProtectionCompleteUntilFirstUserAuthentication'
-    log_done('set com.apple.developer.default-data-protection: until_first_auth')
+    log_done('set Data Protection: until_first_auth')
     app = app.update_service(Spaceship::Portal.app_service.data_protection.until_first_auth)
   end
 
   # iCloud
-  use_icloud_services = false
+  uses_key_value_storage = false
+  uses_cloud_documents = false
+  uses_cloudkit = false
 
-  # KVS
-  use_icloud_services = true if entitlements['com.apple.developer.icloud-container-identifiers']
-  use_icloud_services = true if entitlements['com.apple.developer.ubiquity-kvstore-identifier']
+  uses_key_value_storage = !(entitlements['com.apple.developer.ubiquity-kvstore-identifier'].nil?)
 
-  # Documents
-  use_icloud_services = true if entitlements['aps-environment']
-  use_icloud_services = true if entitlements['com.apple.developer.icloud-container-identifiers']
-  use_icloud_services = true if entitlements['com.apple.developer.icloud-services']
-  use_icloud_services = true if entitlements['com.apple.developer.ubiquity-container-identifiers']
+  icloud_services = entitlements['com.apple.developer.icloud-services']
+  unless icloud_services.to_a.empty?
+    uses_cloud_documents = icloud_services.include?('CloudDocuments')
+    uses_cloudkit = icloud_services.include?('CloudKit')
+  end
 
-  # Cloudkit
-  use_icloud_services = true if entitlements['aps-environment']
-  use_icloud_services = true if entitlements['com.apple.developer.icloud-container-identifiers']
-  use_icloud_services = true if entitlements['com.apple.developer.icloud-services']
-
-  if use_icloud_services
-    log_warn('app uses iclouzd services, but the step can not automatically enabled them, please do the icloud setup manually')
+  if uses_key_value_storage || uses_cloud_documents || uses_cloudkit
+    log_done("set iCloud: on")
     app = app.update_service(Spaceship::Portal.app_service.icloud.on)
     app = app.update_service(Spaceship::Portal.app_service.cloud_kit.cloud_kit)
   end
