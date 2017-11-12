@@ -327,7 +327,7 @@ begin
   project_codesign_settings.each do |path, codesign_settings|
     log_details("distribution type: #{params.distributon_type}")
 
-    if params.distributon_type == 'development' 
+    if params.distributon_type == 'development'
       raise "development distribution defined but no uploaded identity found in team: #{codesign_settings.team_id}" if codesign_settings.development_certificate_info.nil?
       log_done('certificate already found')
       next
@@ -449,8 +449,6 @@ begin
       log_details('PROVISIONING_PROFILE_SPECIFIER: \'\'')
 
       project_helper.force_code_sign_properties(path, target, team_id, code_sign_identity, provisioning_profile)
-
-      build_settings = project_helper.xcodebuild_target_build_settings(path, target)
     end
   end
   ###
