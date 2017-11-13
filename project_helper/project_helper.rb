@@ -216,16 +216,29 @@ class ProjectHelper
       attributes = project.root_object.attributes['TargetAttributes']
       target_attributes = attributes[target_id]
       target_attributes['ProvisioningStyle'] = 'Manual'
+      log_details('ProvisioningStyle: Manual')
 
       # apply code sign properties
       target_obj.build_configuration_list.build_configurations.each do |build_configuration|
         build_settings = build_configuration.build_settings
 
-        build_settings['DEVELOPMENT_TEAM'] = development_team
-        build_settings['CODE_SIGN_IDENTITY'] = code_sign_identity
-        build_settings['PROVISIONING_PROFILE'] = provisioning_profile_uuid
-        build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''
         build_settings['CODE_SIGN_STYLE'] = 'Manual'
+        log_details('CODE_SIGN_STYLE: Manual')
+
+        build_settings['DEVELOPMENT_TEAM'] = development_team
+        log_details("DEVELOPMENT_TEAM: #{team_id}")
+
+        build_settings['PROVISIONING_PROFILE'] = provisioning_profile_uuid
+        log_details("PROVISIONING_PROFILE: #{provisioning_profile}")
+
+        build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''
+        log_details('PROVISIONING_PROFILE_SPECIFIER: \'\'')
+
+        # code sign identity may presents as: CODE_SIGN_IDENTITY and CODE_SIGN_IDENTITY[sdk=iphoneos*]
+        build_settings.each_key do |key|
+          build_settings[key] = code_sign_identity if key.include?('CODE_SIGN_IDENTITY')
+          log_details("#{key}: #{code_sign_identity}")
+        end
       end
     end
 

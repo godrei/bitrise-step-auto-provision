@@ -115,7 +115,7 @@ def split_pipe_separated_list(list)
   separator_count = list.count('|')
   char_count = list.length
 
-  return [] if char_count.zero?
+  return [''] if char_count.zero?
   return [list] unless list.include?('|')
   return Array.new(separator_count + 1, '') if separator_count == char_count
   list.split('|').map(&:strip)
@@ -342,7 +342,7 @@ begin
     raise "#{params.distributon_type} distribution defined but no uploaded identity found in team: #{codesign_settings.team_id}" unless certificate_info
 
     codesign_settings.production_certificate_info = certificate_info
-    log_done("using: #{certificate_common_name(certificate_info.certificate)} certificate")
+    log_done("using: #{certificate_common_name(certificate_info.certificate)}")
     project_codesign_settings[path] = codesign_settings
   end
   ###
@@ -440,13 +440,6 @@ begin
       else
         raise "no codesign settings generated for target: #{target} (#{bundle_id})"
       end
-
-      log_details('CODE_SIGN_STYLE: Manual')
-      log_details('ProvisioningStyle: Manual')
-      log_details("DEVELOPMENT_TEAM: #{team_id}")
-      log_details("CODE_SIGN_IDENTITY: #{code_sign_identity}")
-      log_details("PROVISIONING_PROFILE: #{provisioning_profile}")
-      log_details('PROVISIONING_PROFILE_SPECIFIER: \'\'')
 
       project_helper.force_code_sign_properties(path, target, team_id, code_sign_identity, provisioning_profile)
     end
